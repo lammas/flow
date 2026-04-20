@@ -1,45 +1,45 @@
 .{
     .name = .flow,
     .version = "0.7.2",
-    .minimum_zig_version = "0.15.2",
+    .minimum_zig_version = "0.16.0",
     .fingerprint = 0x52c0d670590aa80f,
 
     .dependencies = .{
         .syntax = .{
-            .url = "git+https://github.com/neurocyte/flow-syntax?ref=zig-0.15#5bc4bcba1552a597d1a6a1f3bf8433ba710b6a90",
-            .hash = "flow_syntax-0.7.2-X8jOoaFbAQBEZWaLbtlj9C8N4zRkNSG2Nq_T40pXRypr",
+            .url = "git+https://github.com/neurocyte/flow-syntax?ref=master#fd10951562892a8f0f507140ada1dda201445cd6",
+            .hash = "flow_syntax-0.7.2-X8jOoZJcAQDG_jcA_FMqGZ98xjrrq7W-GscGocAKzfsM",
         },
         .flags = .{
             .url = "git+https://github.com/neurocyte/flags?ref=main#984b27948da3e4e40a253f76c85b51ec1a9ada11",
             .hash = "flags-0.10.0-a_9h3gB4AADAYn0XaZuUqH1jKRmy6dqvAIbomtTIF6V1",
         },
         .dizzy = .{
-            .url = "https://github.com/neurocyte/dizzy/archive/c9219d23daccd9aa226cfde754fea278cb516459.tar.gz",
-            .hash = "dizzy-1.0.0-q40X4YCRAAAGYO9QOZiYYSOwiiFlqZlecMuQcxPiBcXM",
+            .url = "git+https://github.com/neurocyte/dizzy#4e7c47d882540f6ca6b2d8321451430ba2b6f55d",
+            .hash = "dizzy-1.0.0-q40X4aGRAADKbMiB82-6NSGBDG4Cd4wZxQN4kiYDQu-8",
         },
         .thespian = .{
-            .url = "git+https://github.com/neurocyte/thespian?ref=master#7da13f44e8462d1ac0cac87c6f00cc4fcb62b0f9",
-            .hash = "thespian-0.0.1-owFOjlgiBgC8w4XqkCOegxz5vMy6kNErcssWQWf2QHeE",
+            .url = "git+https://github.com/neurocyte/thespian?ref=master#f35818fb564dff0fa59d6c7a8ec5bb6b295ff9cd",
+            .hash = "thespian-0.0.1-owFOjsj6BgBx1s1FEXRTzviEiBTEjvnCP74yVvCvw_GQ",
         },
         .themes = .{
-            .url = "https://github.com/neurocyte/flow-themes/releases/download/master-9114e2d9ff4e01064ba1da4f780b0c5448b0f0ef/flow-themes.tar.gz",
+            .url = "https://github.com/neurocyte/flow-themes/releases/download/master-e03b6d03d41e24d7a32ada8dd6c29acec964b0df/flow-themes.tar.gz",
             .hash = "N-V-__8AAJZfLAAP6zSuW13nEIrBBHZM9pbeMRwhvQ-8qqx1",
         },
         .fuzzig = .{
-            .url = "https://github.com/fjebaker/fuzzig/archive/4251fe4230d38e721514394a485db62ee1667ff3.tar.gz",
-            .hash = "fuzzig-0.1.1-Ji0xivxIAQBD0g8O_NV_0foqoPf3elsg9Sc3pNfdVH4D",
+            .url = "git+https://codeberg.org/fjebaker/fuzzig?ref=main#f13e84c83ea6c957bb4fa78dab51155f58ef2194",
+            .hash = "fuzzig-0.1.2-Ji0xiuhpAQD9Eu9aSosDvN6YHM5_svNb_4ABuXqT0Qza",
         },
         .vaxis = .{
-            .url = "git+https://github.com/neurocyte/libvaxis?ref=main#1f6c7222f59607bff0ee8d7c6a0637a05bceffcd",
-            .hash = "vaxis-0.5.1-BWNV_CNLCQDmr-D_UzqGRAngktQt7hiGTRf1gyozwxcG",
+            .url = "git+https://github.com/neurocyte/libvaxis?ref=zig-0.16#7776dae8dbb8d66bcd3e0217ee8ac1b999714447",
+            .hash = "vaxis-0.6.0-BWNV_FzGCQBMhEqXh8dqTulHHXqWUdc6Zsv7dzdFw9oz",
         },
         .zeit = .{
-            .url = "git+https://github.com/rockorager/zeit?ref=zig-0.15#ed2ca60db118414bda2b12df2039e33bad3b0b88",
-            .hash = "zeit-0.6.0-5I6bk0J9AgCVa0nnyL0lNY9Xa9F68hHq-ZarhuXNV-Jb",
+            .url = "git+https://github.com/rockorager/zeit?ref=0.16#1b1c95b2282c3003bb79ff6f44d3021ddcb279c1",
+            .hash = "zeit-0.6.0-5I6bk7q6AgBdMJxze3D4l9ylQhkviQ_BX9FigDt13MFn",
         },
         .win32 = .{
-            .url = "git+https://github.com/marlersoft/zigwin32?ref=main#5587b16fa040573846a6bf531301f6206d31a6bf",
-            .hash = "zigwin32-25.0.28-preview-AAAAAICM5AMResOGQnQ85mfe60TTOQeMtt7GRATUOKoP",
+            .url = "git+https://github.com/marlersoft/zigwin32?ref=main#ec98bb4d9eea532320a8551720a9e3ec6de64994",
+            .hash = "win32-25.0.28-preview-mX5pFWMt5QPTVIGh3r2-OpPunpcCCjApyRbA6Zn6WALH",
             .lazy = true,
         },
         .diffz = .{
