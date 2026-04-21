@@ -18,13 +18,13 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     const lint_step = b.step("lint", "Run lints");
 
-    var version: std.ArrayList(u8) = .empty;
-    defer version.deinit(b.allocator);
-    gen_version(b, version.writer(b.allocator)) catch |e| {
+    var version: std.Io.Writer.Allocating = .init(b.allocator);
+    defer version.deinit();
+    gen_version(b, &version.writer) catch |e| {
         if (b.release_mode != .off)
             std.debug.panic("gen_version failed: {any}", .{e});
-        version.clearAndFree(b.allocator);
-        version.appendSlice(b.allocator, "unknown") catch {};
+        version.clearRetainingCapacity();
+        version.writer.writeAll("unknown") catch {};
     };
 
     const release = switch (b.release_mode) {
@@ -48,7 +48,7 @@ pub fn build(b: *std.Build) void {
         use_llvm,
         pie,
         gui,
-        version.items,
+        version.written(),
         all_targets,
         test_filters,
     );
@@ -263,27 +263,27 @@ pub fn build_exe(
 
     const options_mod = options.createModule();
 
-    std.fs.cwd().makeDir(".cache") catch |e| switch (e) {
+    std.Io.Dir.cwd().createDir(b.graph.io, ".cache", .default_dir) catch |e| switch (e) {
         error.PathAlreadyExists => {},
         else => std.debug.panic("makeDir(\".cache\") failed: {any}", .{e}),
     };
-    std.fs.cwd().makeDir(".cache/cdb") catch |e| switch (e) {
+    std.Io.Dir.cwd().createDir(b.graph.io, ".cache/cdb", .default_dir) catch |e| switch (e) {
         error.PathAlreadyExists => {},
         else => std.debug.panic("makeDir(\".cache/cdb\") failed: {any}", .{e}),
     };
 
-    var version_info: std.ArrayList(u8) = .empty;
-    defer version_info.deinit(b.allocator);
-    gen_version_info(b, target, version_info.writer(b.allocator), optimize) catch |e| {
+    var version_info: std.Io.Writer.Allocating = .init(b.allocator);
+    defer version_info.deinit();
+    gen_version_info(b, target, &version_info.writer, optimize) catch |e| {
         if (b.release_mode != .off)
             std.debug.panic("gen_version failed: {any}", .{e});
-        version_info.clearAndFree(b.allocator);
-        version_info.appendSlice(b.allocator, "unknown") catch {};
+        version_info.clearRetainingCapacity();
+        version_info.writer.writeAll("unknown") catch {};
     };
 
     const wf = b.addWriteFiles();
     const version_file = wf.add("version", version);
-    const version_info_file = wf.add("version_info", version_info.items);
+    const version_info_file = wf.add("version_info", version_info.written());
 
     const vaxis_dep = b.dependency("vaxis", .{
         .target = target,
@@ -724,7 +724,7 @@ pub fn build_exe(
     exe.root_module.addImport("version_info", b.createModule(.{ .root_source_file = version_info_file }));
 
     if (target.result.os.tag == .windows) {
-        exe.addWin32ResourceFile(.{
+        exe.root_module.addWin32ResourceFile(.{
             .file = b.path("src/win32/flow.rc"),
         });
         if (gui) {
@@ -820,38 +820,38 @@ fn gen_version_info(
 ) !void {
     var code: u8 = 0;
 
-    const describe = try b.runAllowFail(&[_][]const u8{ "git", "describe", "--always", "--tags" }, &code, .Ignore);
-    const date_ = try b.runAllowFail(&[_][]const u8{ "git", "show", "-s", "--format=%ci", "HEAD" }, &code, .Ignore);
-    const branch_ = try b.runAllowFail(&[_][]const u8{ "git", "rev-parse", "--abbrev-ref", "HEAD" }, &code, .Ignore);
-    const branch = std.mem.trimRight(u8, branch_, "\r\n ");
+    const describe = try b.runAllowFail(&[_][]const u8{ "git", "describe", "--always", "--tags" }, &code, .ignore);
+    const date_ = try b.runAllowFail(&[_][]const u8{ "git", "show", "-s", "--format=%ci", "HEAD" }, &code, .ignore);
+    const branch_ = try b.runAllowFail(&[_][]const u8{ "git", "rev-parse", "--abbrev-ref", "HEAD" }, &code, .ignore);
+    const branch = std.mem.trimEnd(u8, branch_, "\r\n ");
     const tracking_branch_ = blk: {
-        var buf: std.ArrayList(u8) = .empty;
-        defer buf.deinit(b.allocator);
-        try buf.appendSlice(b.allocator, branch);
-        try buf.appendSlice(b.allocator, "@{upstream}");
-        break :blk (b.runAllowFail(&[_][]const u8{ "git", "rev-parse", "--abbrev-ref", buf.items }, &code, .Ignore) catch "");
+        var buf: std.Io.Writer.Allocating = .init(b.allocator);
+        defer buf.deinit();
+        try buf.writer.writeAll(branch);
+        try buf.writer.writeAll("@{upstream}");
+        break :blk (b.runAllowFail(&[_][]const u8{ "git", "rev-parse", "--abbrev-ref", buf.written() }, &code, .ignore) catch "");
     };
     const tracking_remote_name = if (std.mem.indexOfScalar(u8, tracking_branch_, '/')) |pos| tracking_branch_[0..pos] else "";
     const tracking_remote_ = if (tracking_remote_name.len > 0) blk: {
-        var remote_config_path: std.ArrayList(u8) = .empty;
-        defer remote_config_path.deinit(b.allocator);
-        try remote_config_path.writer(b.allocator).print("remote.{s}.url", .{tracking_remote_name});
-        break :blk b.runAllowFail(&[_][]const u8{ "git", "config", remote_config_path.items }, &code, .Ignore) catch "(remote not found)";
+        var remote_config_path: std.Io.Writer.Allocating = .init(b.allocator);
+        defer remote_config_path.deinit();
+        try remote_config_path.writer.print("remote.{s}.url", .{tracking_remote_name});
+        break :blk b.runAllowFail(&[_][]const u8{ "git", "config", remote_config_path.written() }, &code, .ignore) catch "(remote not found)";
     } else "";
-    const remote_ = b.runAllowFail(&[_][]const u8{ "git", "config", "remote.origin.url" }, &code, .Ignore) catch "(origin not found)";
-    const log_ = b.runAllowFail(&[_][]const u8{ "git", "log", "--pretty=oneline", "@{u}..." }, &code, .Ignore) catch "";
-    const diff_ = b.runAllowFail(&[_][]const u8{ "git", "diff", "--stat", "--patch", "HEAD" }, &code, .Ignore) catch "(git diff failed)";
-    const version = std.mem.trimRight(u8, describe, "\r\n ");
-    const date = std.mem.trimRight(u8, date_, "\r\n ");
-    const tracking_branch = std.mem.trimRight(u8, tracking_branch_, "\r\n ");
-    const tracking_remote = std.mem.trimRight(u8, tracking_remote_, "\r\n ");
-    const remote = std.mem.trimRight(u8, remote_, "\r\n ");
-    const base_commit_ = b.runAllowFail(&[_][]const u8{ "git", "merge-base", branch, tracking_branch }, &code, .Ignore) catch "";
-    const base_commit = std.mem.trimRight(u8, base_commit_, "\r\n ");
-    const describe_base_commit_ = try b.runAllowFail(&[_][]const u8{ "git", "describe", "--always", "--tags", base_commit }, &code, .Ignore);
-    const describe_base_commit = std.mem.trimRight(u8, describe_base_commit_, "\r\n ");
-    const log = std.mem.trimRight(u8, log_, "\r\n ");
-    const diff = std.mem.trimRight(u8, diff_, "\r\n ");
+    const remote_ = b.runAllowFail(&[_][]const u8{ "git", "config", "remote.origin.url" }, &code, .ignore) catch "(origin not found)";
+    const log_ = b.runAllowFail(&[_][]const u8{ "git", "log", "--pretty=oneline", "@{u}..." }, &code, .ignore) catch "";
+    const diff_ = b.runAllowFail(&[_][]const u8{ "git", "diff", "--stat", "--patch", "HEAD" }, &code, .ignore) catch "(git diff failed)";
+    const version = std.mem.trimEnd(u8, describe, "\r\n ");
+    const date = std.mem.trimEnd(u8, date_, "\r\n ");
+    const tracking_branch = std.mem.trimEnd(u8, tracking_branch_, "\r\n ");
+    const tracking_remote = std.mem.trimEnd(u8, tracking_remote_, "\r\n ");
+    const remote = std.mem.trimEnd(u8, remote_, "\r\n ");
+    const base_commit_ = b.runAllowFail(&[_][]const u8{ "git", "merge-base", branch, tracking_branch }, &code, .ignore) catch "";
+    const base_commit = std.mem.trimEnd(u8, base_commit_, "\r\n ");
+    const describe_base_commit_ = try b.runAllowFail(&[_][]const u8{ "git", "describe", "--always", "--tags", base_commit }, &code, .ignore);
+    const describe_base_commit = std.mem.trimEnd(u8, describe_base_commit_, "\r\n ");
+    const log = std.mem.trimEnd(u8, log_, "\r\n ");
+    const diff = std.mem.trimEnd(u8, diff_, "\r\n ");
     const target_triple = try target.result.zigTriple(b.allocator);
 
     try writer.print("Flow Control: a programmer's text editor\n\nversion: {s}{s}\ncommitted: {s}\ntarget: {s}\n", .{
@@ -876,13 +876,13 @@ fn gen_version_info(
         try writer.print("\nwith the following uncommited changes:\n\n{s}\n", .{diff});
 }
 
-fn gen_version(b: *std.Build, writer: anytype) !void {
+fn gen_version(b: *std.Build, writer: *std.Io.Writer) !void {
     var code: u8 = 0;
 
-    const describe = try b.runAllowFail(&[_][]const u8{ "git", "describe", "--always", "--tags" }, &code, .Ignore);
-    const diff_ = try b.runAllowFail(&[_][]const u8{ "git", "diff", "--stat", "--patch", "HEAD" }, &code, .Ignore);
-    const diff = std.mem.trimRight(u8, diff_, "\r\n ");
-    const version = std.mem.trimRight(u8, describe, "\r\n ");
+    const describe = try b.runAllowFail(&[_][]const u8{ "git", "describe", "--always", "--tags" }, &code, .ignore);
+    const diff_ = try b.runAllowFail(&[_][]const u8{ "git", "diff", "--stat", "--patch", "HEAD" }, &code, .ignore);
+    const diff = std.mem.trimEnd(u8, diff_, "\r\n ");
+    const version = std.mem.trimEnd(u8, describe, "\r\n ");
 
     try writer.print("{s}{s}", .{ version, if (diff.len > 0) "-dirty" else "" });
 }
