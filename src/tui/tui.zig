@@ -74,7 +74,7 @@ keepalive_timer: ?tp.Cancellable = null,
 input_idle_timer: ?tp.Cancellable = null,
 mouse_idle_timer: ?tp.Cancellable = null,
 fontface_: []const u8 = "",
-fontfaces_: std.ArrayListUnmanaged([]const u8) = .{},
+fontfaces_: std.ArrayList([]const u8) = .empty,
 input_is_idle: bool = false,
 enable_input_idle_timer: bool = true,
 enable_mouse_idle_timer: bool = false,
@@ -198,7 +198,7 @@ fn init(allocator: Allocator) InitError!*Self {
             .{"init"},
         )),
         .no_sleep = tp.env.get().is("no-sleep"),
-        .query_cache_ = try syntax.QueryCache.create(allocator, .{}),
+        .query_cache_ = try syntax.QueryCache.create(root.get_init().io, allocator, .{}),
         .dark_theme = dark_theme,
         .light_theme = light_theme,
     };
@@ -320,7 +320,7 @@ fn deinit(self: *Self) void {
 
 fn listen_sigwinch(self: *Self) error{ThespianSignalInitFailed}!void {
     if (self.sigwinch_signal) |old| old.deinit();
-    self.sigwinch_signal = try tp.signal.init(std.posix.SIG.WINCH, tp.message.fmt(.{"sigwinch"}));
+    self.sigwinch_signal = try tp.signal.init(@intFromEnum(std.posix.SIG.WINCH), tp.message.fmt(.{"sigwinch"}));
 }
 
 fn handle_input_idle(self: *Self) void {
@@ -630,7 +630,7 @@ fn receive_safe(self: *Self, from: tp.pid_ref, m: tp.message) !void {
 
 fn render(self: *Self) void {
     defer self.frames_rendered_ += 1;
-    const current_time = std.time.microTimestamp();
+    const current_time = root.get_now().toMicroseconds();
     if (current_time < self.frame_last_time) { // clock moved backwards
         self.frame_last_time = current_time;
         return;

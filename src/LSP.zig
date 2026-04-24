@@ -111,7 +111,7 @@ pub fn close(self: *Self) void {
 
 fn RequestContext(T: type) type {
     return struct {
-        receiver: ReceiverT,
+        receiver: Receiver,
         ctx: T,
         to: tp.pid,
         request: tp.message,
@@ -119,7 +119,7 @@ fn RequestContext(T: type) type {
         a: std.mem.Allocator,
 
         const Self = @This();
-        const ReceiverT = tp.Receiver(*@This());
+        const Receiver = tp.Receiver(*@This());
 
         fn send(a: std.mem.Allocator, to: tp.pid_ref, ctx: T, request: tp.message) (OutOfMemoryError || SpawnError)!void {
             const self = try a.create(@This());
@@ -170,9 +170,9 @@ const Process = struct {
     tag: [:0]const u8,
     project: [:0]const u8,
     sp_tag: [:0]const u8,
-    log_file: ?std.fs.File = null,
+    log_file: ?std.Io.File = null,
     log_file_path: ?[]const u8 = null,
-    log_file_writer: ?std.fs.File.Writer = null,
+    log_file_writer: ?std.Io.File.Writer = null,
     log_file_writer_buf: [1024]u8 = undefined,
     next_id: i32 = 0,
     requests: std.StringHashMap(tp.pid),
@@ -228,7 +228,7 @@ const Process = struct {
         self.write_log("### terminated LSP process ###\n", .{});
         if (self.log_file) |file| {
             if (self.log_file_writer) |*writer| writer.interface.flush() catch {};
-            file.close();
+            file.close(root.get_init().io);
         }
         if (self.log_file_path) |file_path| self.allocator.free(file_path);
     }
@@ -267,16 +267,17 @@ const Process = struct {
         const frame = tracy.initZone(@src(), .{ .name = module_name ++ " start" });
         defer frame.deinit();
         _ = tp.set_trap(true);
-        self.sp = tp.subprocess.init(self.allocator, self.cmd, self.sp_tag, .Pipe) catch |e| return tp.exit_error(e, @errorReturnTrace());
+        self.sp = tp.subprocess.init(root.get_init().io, self.allocator, self.cmd, self.sp_tag, .pipe) catch |e| return tp.exit_error(e, @errorReturnTrace());
         tp.receive(&self.receiver);
 
         var log_file_path: std.Io.Writer.Allocating = .init(self.allocator);
         defer log_file_path.deinit();
         const state_dir = root.get_state_dir() catch |e| return tp.exit_error(e, @errorReturnTrace());
         log_file_path.writer.print("{s}{c}lsp-{s}.log", .{ state_dir, std.fs.path.sep, self.tag }) catch |e| return tp.exit_error(e, @errorReturnTrace());
-        self.log_file = std.fs.createFileAbsolute(log_file_path.written(), .{ .truncate = true }) catch |e| return tp.exit_error(e, @errorReturnTrace());
+        const io = root.get_init().io;
+        self.log_file = std.Io.Dir.cwd().createFile(io, log_file_path.written(), .{ .truncate = true }) catch |e| return tp.exit_error(e, @errorReturnTrace());
         self.log_file_path = log_file_path.toOwnedSlice() catch null;
-        if (self.log_file) |log_file| self.log_file_writer = log_file.writer(&self.log_file_writer_buf);
+        if (self.log_file) |log_file| self.log_file_writer = log_file.writer(io, &self.log_file_writer_buf);
     }
 
     fn receive(self: *Process, from: tp.pid_ref, m: tp.message) tp.result {

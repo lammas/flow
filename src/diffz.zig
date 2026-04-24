@@ -3,6 +3,7 @@ const tp = @import("thespian");
 const diffz = @import("diffz");
 const Buffer = @import("Buffer");
 const tracy = @import("tracy");
+const root = @import("soft_root").root;
 
 const module_name = @typeName(@This());
 
@@ -115,8 +116,8 @@ pub fn diff(allocator: std.mem.Allocator, dst: []const u8, src: []const u8) erro
     var diffs: std.ArrayList(Diff) = .empty;
     errdefer diffs.deinit(allocator);
 
-    const dmp = diffz.default;
-    var diff_list = try diffz.diff(&dmp, arena, src, dst, false);
+    var dmp = diffz.initDefault(root.get_init().io, arena);
+    var diff_list = try diffz.diff(&dmp, src, dst, false, .{ .duration = .{ .clock = .real, .raw = .fromSeconds(60) } });
     try diffz.diffCleanupSemanticLossless(arena, &diff_list);
 
     if (diff_list.items.len > 2)

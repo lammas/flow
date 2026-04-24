@@ -574,6 +574,7 @@ pub fn build_exe(
             .{ .name = "thespian", .module = thespian_mod },
             .{ .name = "cbor", .module = cbor_mod },
             .{ .name = "log", .module = log_mod },
+            .{ .name = "soft_root", .module = soft_root_mod },
         },
     });
 
@@ -584,6 +585,7 @@ pub fn build_exe(
             .{ .name = "cbor", .module = cbor_mod },
             .{ .name = "shell", .module = shell_mod },
             .{ .name = "bin_path", .module = bin_path_mod },
+            .{ .name = "soft_root", .module = soft_root_mod },
         },
     });
 
@@ -594,6 +596,7 @@ pub fn build_exe(
             .{ .name = "cbor", .module = cbor_mod },
             .{ .name = "log", .module = log_mod },
             .{ .name = "bin_path", .module = bin_path_mod },
+            .{ .name = "soft_root", .module = soft_root_mod },
         },
     });
 
@@ -625,6 +628,7 @@ pub fn build_exe(
     const diff_mod = b.createModule(.{
         .root_source_file = b.path("src/diff.zig"),
         .imports = &.{
+            .{ .name = "soft_root", .module = soft_root_mod },
             .{ .name = "thespian", .module = thespian_mod },
             .{ .name = "Buffer", .module = Buffer_mod },
             .{ .name = "tracy", .module = tracy_mod },

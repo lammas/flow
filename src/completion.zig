@@ -15,7 +15,7 @@ pub fn send(
 
 fn RequestContext(T: type) type {
     return struct {
-        receiver: ReceiverT,
+        receiver: Receiver,
         ctx: T,
         to: tp.pid,
         request: tp.message,
@@ -23,12 +23,11 @@ fn RequestContext(T: type) type {
         a: std.mem.Allocator,
 
         const Self = @This();
-        const ReceiverT = tp.Receiver(*@This());
+        const Receiver = tp.Receiver(*@This());
 
         fn send(a: std.mem.Allocator, to: tp.pid_ref, ctx: T, request: tp.message) (OutOfMemoryError || SpawnError)!void {
             const self = try a.create(@This());
             self.* = .{
-                .receiver = undefined,
                 .ctx = if (@hasDecl(T, "clone")) ctx.clone() else ctx,
                 .to = to.clone(),
                 .request = try request.clone(std.heap.c_allocator),

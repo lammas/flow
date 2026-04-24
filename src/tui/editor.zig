@@ -266,7 +266,7 @@ pub const TriggerSymbol = struct {
     char: u8,
     command: command.ID,
 
-    pub fn cborEncode(self: @This(), writer: *std.Io.Writer) std.io.Writer.Error!void {
+    pub fn cborEncode(self: @This(), writer: *std.Io.Writer) std.Io.Writer.Error!void {
         try cbor.writeArrayHeader(writer, 2);
         try cbor.writeValue(writer, self.char);
         try cbor.writeValue(writer, command.get_name(self.command));
@@ -637,7 +637,7 @@ pub const Editor = struct {
             .handlers = EventHandler.List.init(allocator),
             .animation_lag = get_animation_max_lag(),
             .animation_frame_rate = frame_rate,
-            .animation_last_time = time.microTimestamp(),
+            .animation_last_time = root_mod.get_now().toMicroseconds(),
             .enable_format_on_save = tui.config().enable_format_on_save,
             .enable_terminal_cursor = tui.config().enable_terminal_cursor,
             .render_whitespace = tui.config().whitespace_mode,
@@ -1013,7 +1013,6 @@ pub const Editor = struct {
                     self.logger.print("nothing to undo", .{});
                     return;
                 },
-                else => return e,
             };
             try self.restore_undo_meta(meta);
             try self.send_editor_jump_destination();
@@ -1029,7 +1028,6 @@ pub const Editor = struct {
                     self.logger.print("nothing to redo", .{});
                     return;
                 },
-                else => return e,
             };
             try self.restore_redo_meta(meta);
             try self.send_editor_jump_destination();
@@ -1568,9 +1566,10 @@ pub const Editor = struct {
 
             var age_buf: [32]u8 = undefined;
             var age_stream: std.Io.Writer = .fixed(&age_buf);
+            const now = root_mod.get_now();
             switch (tui.config().inline_vcs_blame_age) {
-                .short => age_stream.print(" ({f})", .{@import("time_fmt").age_short(commit.@"author-time")}) catch {},
-                .long => age_stream.print(", {f}", .{@import("time_fmt").age_long(commit.@"author-time")}) catch {},
+                .short => age_stream.print(" ({f})", .{@import("time_fmt").age_short(commit.@"author-time", now)}) catch {},
+                .long => age_stream.print(", {f}", .{@import("time_fmt").age_long(commit.@"author-time", now)}) catch {},
             }
             const age = age_stream.buffered();
 
@@ -2969,7 +2968,7 @@ pub const Editor = struct {
     }
 
     fn update_animation_lag(self: *Self) void {
-        const ts = time.microTimestamp();
+        const ts = root_mod.get_now().toMicroseconds();
         const tdiff = ts - self.animation_last_time;
         const lag: f64 = @as(f64, @floatFromInt(tdiff)) / time.us_per_s;
         self.animation_lag = @max(@min(lag, get_animation_max_lag()), get_animation_min_lag());
@@ -5714,7 +5713,7 @@ pub const Editor = struct {
             return;
         var kind: enum { full, incremental, none } = .none;
         var edit_count: usize = 0;
-        const start_time = std.time.milliTimestamp();
+        const start_time = root_mod.get_now().toMilliseconds();
         if (self.syntax) |syn| {
             if (self.syntax_no_render) {
                 const frame = tracy.initZone(@src(), .{ .name = "editor reset syntax" });
@@ -5792,7 +5791,7 @@ pub const Editor = struct {
                 }
             }
         }
-        const end_time = std.time.milliTimestamp();
+        const end_time = root_mod.get_now().toMilliseconds();
         if (kind == .full or kind == .incremental) {
             const update_time = end_time - start_time;
             self.syntax_incremental_reparse = end_time - start_time > syntax_full_reparse_time_limit;
@@ -7162,7 +7161,7 @@ pub const Editor = struct {
         var buf: [1024]u8 = undefined;
         const json = try cmd.to_json(&buf);
         std.log.debug("filter: start {s}", .{json});
-        var sp = try tp.subprocess.init(self.allocator, cmd, "filter", .Pipe);
+        var sp = try tp.subprocess.init(root_mod.get_init().io, self.allocator, cmd, "filter", .pipe);
         defer {
             sp.close() catch {};
             sp.deinit();
@@ -7714,7 +7713,7 @@ pub const EditorWidget = struct {
             else => return,
         })(self, y, x, ypx, xpx);
         self.last_btn = btn;
-        self.last_btn_time_ms = time.milliTimestamp();
+        self.last_btn_time_ms = root_mod.get_now().toMilliseconds();
         return ret;
     }
 
@@ -7742,7 +7741,7 @@ pub const EditorWidget = struct {
             self.last_btn_x = x_;
         }
         if (self.last_btn == input.mouse.BUTTON1) {
-            const click_time_ms = time.milliTimestamp() - self.last_btn_time_ms;
+            const click_time_ms = root_mod.get_now().toMilliseconds() - self.last_btn_time_ms;
             if (click_time_ms <= double_click_time_ms and
                 self.last_btn_y == y_ and
                 self.last_btn_x == x_)
