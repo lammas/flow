@@ -33,17 +33,20 @@ fn RequestContext(T: type) type {
                 .request = try request.clone(std.heap.c_allocator),
                 .response = null,
                 .a = a,
+                .receiver = .init(receive_, dtor, self),
             };
-            self.receiver = ReceiverT.init(receive_, self);
             const proc = try tp.spawn_link(a, self, start, @typeName(@This()));
             defer proc.deinit();
         }
 
-        fn deinit(self: *@This()) void {
-            if (@hasDecl(T, "deinit")) self.ctx.deinit();
+        fn dtor(self: *@This()) void {
             std.heap.c_allocator.free(self.request.buf);
             self.to.deinit();
             self.a.destroy(self);
+        }
+
+        fn deinit(self: *@This()) void {
+            if (@hasDecl(T, "deinit")) self.ctx.deinit();
         }
 
         fn start(self: *@This()) tp.result {

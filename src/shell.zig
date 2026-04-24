@@ -174,7 +174,7 @@ const Process = struct {
             .allocator = allocator,
             .argv = argv,
             .arg0 = try allocator.dupeZ(u8, arg0),
-            .receiver = Receiver.init(receive, self),
+            .receiver = .init(receive, dtor, self),
             .parent = tp.self_pid().clone(),
             .logger = log.logger(@typeName(Self)),
             .stdin_behavior = stdin_behavior,
@@ -183,7 +183,7 @@ const Process = struct {
         return tp.spawn_link(self.allocator, self, Process.start, self.arg0);
     }
 
-    fn deinit(self: *Process) void {
+    fn dtor(self: *Process) void {
         if (self.sp) |*sp| {
             defer self.sp = null;
             sp.deinit();
@@ -208,7 +208,6 @@ const Process = struct {
     }
 
     fn start(self: *Process) tp.result {
-        errdefer self.deinit();
         _ = tp.set_trap(true);
         var buf: [1024]u8 = undefined;
         const json = self.argv.to_json(&buf) catch |e| return tp.exit_error(e, @errorReturnTrace());
@@ -219,7 +218,6 @@ const Process = struct {
     }
 
     fn receive(self: *Process, _: tp.pid_ref, m: tp.message) tp.result {
-        errdefer self.deinit();
         var bytes: []const u8 = "";
 
         if (try m.match(.{ "input", tp.extract(&bytes) })) {

@@ -103,7 +103,7 @@ const Process = struct {
         self.* = .{
             .allocator = allocator,
             .query = try allocator.dupe(u8, query),
-            .receiver = Receiver.init(receive, self),
+            .receiver = .init(receive, dtor, self),
             .output = .init(allocator),
             .parent = tp.self_pid().clone(),
             .tag = try allocator.dupeZ(u8, tag),
@@ -113,7 +113,7 @@ const Process = struct {
         return tp.spawn_link(self.allocator, self, Process.start, tag);
     }
 
-    fn deinit(self: *Process) void {
+    fn dtor(self: *Process) void {
         if (self.sp) |*sp| sp.deinit();
         self.parent.deinit();
         self.output.deinit();
@@ -122,6 +122,10 @@ const Process = struct {
         self.allocator.free(self.query);
         self.close() catch {};
         self.allocator.destroy(self);
+    }
+
+    fn deinit(self: *Process) void {
+        self.close() catch {};
     }
 
     fn close(self: *Process) tp.result {

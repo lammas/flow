@@ -190,7 +190,7 @@ fn init(allocator: Allocator) InitError!*Self {
         .frame_time = frame_time,
         .frame_clock = frame_clock,
         .frame_clock_running = true,
-        .receiver = Receiver.init(receive, self),
+        .receiver = .init(receive, dtor, self),
         .message_filters_ = MessageFilter.List.init(allocator),
         .input_listeners_ = EventHandler.List.init(allocator),
         .logger = log.logger("tui"),
@@ -271,6 +271,10 @@ fn init_delayed(self: *Self) command.Result {
     self.start_auto_run_timer();
 }
 
+fn dtor(self: *Self) void {
+    self.allocator.destroy(self);
+}
+
 fn deinit(self: *Self) void {
     if (self.auto_run_timer) |*t| {
         t.cancel() catch {};
@@ -315,7 +319,6 @@ fn deinit(self: *Self) void {
     self.query_cache_.deinit();
     root.free_config(self.allocator, self.config_bufs);
     self.clipboard_deinit();
-    self.allocator.destroy(self);
 }
 
 fn listen_sigwinch(self: *Self) error{ThespianSignalInitFailed}!void {

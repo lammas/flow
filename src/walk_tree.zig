@@ -40,7 +40,7 @@ pub fn start(a_: std.mem.Allocator, root_path_: []const u8, entry_handler: Entry
                 .allocator = allocator,
                 .root_path = try allocator.dupe(u8, root_path),
                 .parent = tp.self_pid().clone(),
-                .receiver = .init(tree_walker.receive, self),
+                .receiver = .init(receive, dtor, self),
                 .dir = try std.Io.Dir.cwd().openDir(io, self.root_path, .{ .iterate = true }),
                 .walker = try .init(io, self.dir, self.allocator, options_),
                 .entry_handler = entry_handler_,
@@ -51,22 +51,22 @@ pub fn start(a_: std.mem.Allocator, root_path_: []const u8, entry_handler: Entry
         }
 
         fn start(self: *tree_walker) tp.result {
-            errdefer self.deinit();
             const frame = tracy.initZone(@src(), .{ .name = "project scan" });
             defer frame.deinit();
             tp.receive(&self.receiver);
             self.next() catch |e| return tp.exit_error(e, @errorReturnTrace());
         }
 
-        fn deinit(self: *tree_walker) void {
-            self.walker.deinit();
-            self.dir.close();
+        fn dtor(self: *tree_walker) void {
+            const io = root.get_init().io;
+            self.walker.deinit(io);
+            self.dir.close(io);
             self.allocator.free(self.root_path);
             self.parent.deinit();
+            self.allocator.destroy(self);
         }
 
         fn receive(self: *tree_walker, _: tp.pid_ref, m: tp.message) tp.result {
-            errdefer self.deinit();
             const frame = tracy.initZone(@src(), .{ .name = "project scan" });
             defer frame.deinit();
 

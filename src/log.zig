@@ -33,7 +33,6 @@ pub fn spawn(ctx: *tp.context, allocator: std.mem.Allocator, env: ?*const tp.env
 fn start(args: StartArgs) tp.result {
     _ = tp.set_trap(true);
     var this = Self.init(args) catch |e| return tp.exit_error(e, @errorReturnTrace());
-    errdefer this.deinit();
     tp.receive(&this.receiver);
 }
 
@@ -41,7 +40,7 @@ fn init(args: StartArgs) !*Self {
     var p = try args.allocator.create(Self);
     p.* = .{
         .allocator = args.allocator,
-        .receiver = Receiver.init(Self.receive, p),
+        .receiver = .init(receive, dtor, p),
         .subscriber = null,
         .heap = undefined,
         .fba = std.heap.FixedBufferAllocator.init(&p.heap),
@@ -50,7 +49,7 @@ fn init(args: StartArgs) !*Self {
     return p;
 }
 
-fn deinit(self: *const Self) void {
+fn dtor(self: *Self) void {
     if (self.subscriber) |*s| s.deinit();
     self.allocator.destroy(self);
 }
@@ -86,7 +85,6 @@ fn store_reset(self: *Self) void {
 }
 
 fn receive(self: *Self, from: tp.pid_ref, m: tp.message) tp.result {
-    errdefer self.deinit();
     var output: []const u8 = undefined;
     if (try m.match(.{ "log", "error", tp.string, tp.string, "->", tp.extract(&output) })) {
         if (self.subscriber) |subscriber| {

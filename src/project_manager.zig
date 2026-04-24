@@ -359,13 +359,13 @@ const Process = struct {
             .allocator = allocator,
             .parent = tp.self_pid().clone(),
             .logger = log.logger(module_name),
-            .receiver = Receiver.init(Process.receive, self),
+            .receiver = .init(receive, dtor, self),
             .projects = .empty,
         };
         return tp.spawn_link(self.allocator, self, Process.start, module_name);
     }
 
-    fn deinit(self: *Process) void {
+    fn dtor(self: *Process) void {
         var i = self.projects.iterator();
         while (i.next()) |p| {
             self.allocator.free(p.key_ptr.*);
@@ -384,7 +384,6 @@ const Process = struct {
     }
 
     fn receive(self: *Process, from: tp.pid_ref, m: tp.message) tp.result {
-        errdefer self.deinit();
         return self.receive_safe(from, m) catch |e| switch (e) {
             error.ExitNormal => tp.exit_normal(),
             error.ClientFailed => {

@@ -57,23 +57,20 @@ const Process = struct {
         const self = try allocator.create(Process);
         errdefer allocator.destroy(self);
         self.* = .{
-            .receiver = Receiver.init(Process.receive, self),
+            .receiver = .init(receive, dtor, self),
         };
         return tp.spawn_link(allocator, self, Process.start, module_name);
     }
 
     fn start(self: *Process) tp.result {
-        errdefer self.deinit();
         tp.receive(&self.receiver);
     }
 
-    fn deinit(self: *Process) void {
+    fn dtor(self: *Process) void {
         allocator.destroy(self);
     }
 
-    fn receive(self: *Process, from: tp.pid_ref, m: tp.message) tp.result {
-        errdefer self.deinit();
-
+    fn receive(_: *Process, from: tp.pid_ref, m: tp.message) tp.result {
         var cb: usize = 0;
         var cb_data: usize = 0;
         var text_dst_ptr: usize = 0;

@@ -131,16 +131,19 @@ fn RequestContext(T: type) type {
                 .response = null,
                 .a = a,
             };
-            self.receiver = ReceiverT.init(receive_, self);
+            self.receiver = .init(receive_, dtor, self);
             const proc = try tp.spawn_link(a, self, start, @typeName(@This()));
             defer proc.deinit();
         }
 
-        fn deinit(self: *@This()) void {
-            self.ctx.deinit();
+        fn dtor(self: *@This()) void {
             std.heap.c_allocator.free(self.request.buf);
             self.to.deinit();
             self.a.destroy(self);
+        }
+
+        fn deinit(self: *@This()) void {
+            self.ctx.deinit();
         }
 
         fn start(self: *@This()) tp.result {
@@ -203,7 +206,7 @@ const Process = struct {
         self.* = .{
             .allocator = allocator,
             .cmd = try cmd.clone(allocator),
-            .receiver = Receiver.init(receive, self),
+            .receiver = .init(receive, dtor, self),
             .recv_buf = .empty,
             .parent = tp.self_pid().clone(),
             .tag = try allocator.dupeZ(u8, tag),
@@ -212,6 +215,10 @@ const Process = struct {
             .sp_tag = try sp_tag_.toOwnedSliceSentinel(0),
         };
         return tp.spawn_link(self.allocator, self, Process.start, self.tag);
+    }
+
+    fn dtor(self: *Process) void {
+        self.allocator.destroy(self);
     }
 
     fn deinit(self: *Process) void {
