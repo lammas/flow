@@ -1164,6 +1164,7 @@ fn restart() noreturn {
 }
 
 fn restart_with_sudo() noreturn {
+    if (builtin.os.tag == .windows) return restart_win32();
     const sudo_executable = resolve_executable("sudo");
     const flow_executable = resolve_executable(std.mem.span(get_init().minimal.args.vector[0]));
     const argv = [_]?[*:0]const u8{
@@ -1178,8 +1179,14 @@ fn restart_with_sudo() noreturn {
 }
 
 fn restart_win32() noreturn {
+    const argv0 = blk: {
+        const a = std.heap.c_allocator;
+        var iter = std.process.Args.Iterator.initAllocator(get_init().minimal.args, a) catch break :blk "flow";
+        break :blk iter.next() orelse "flow";
+    };
+
     if (!build_options.gui) return restart_manual();
-    const executable = resolve_executable(std.mem.span(get_init().minimal.args.vector[0]));
+    const executable = resolve_executable(argv0);
     const argv = [_][]const u8{
         executable,
         "--restore-session",
@@ -1196,7 +1203,14 @@ fn restart_win32() noreturn {
 }
 
 fn restart_manual() noreturn {
-    const executable = resolve_executable(std.mem.span(get_init().minimal.args.vector[0]));
+    const argv0 =
+        if (builtin.os.tag == .windows) blk: {
+            const a = std.heap.c_allocator;
+            var iter = std.process.Args.Iterator.initAllocator(get_init().minimal.args, a) catch break :blk "flow";
+            break :blk iter.next() orelse "flow";
+        } else std.mem.span(get_init().minimal.args.vector[0]);
+    const executable = resolve_executable(argv0);
+
     var stderr_buffer: [1024]u8 = undefined;
     var stderr_writer = std.Io.File.stderr().writer(global_init.io, &stderr_buffer);
     stderr_writer.interface.print(

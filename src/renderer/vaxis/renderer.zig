@@ -532,7 +532,7 @@ pub fn copy_to_windows_clipboard(text: []const u8) !void {
     data[text.len] = 0;
     _ = win32.GlobalUnlock(mem);
 
-    if (win32.OpenClipboard(null) == 0) {
+    if (win32.OpenClipboard(null) == .FALSE) {
         _ = win32.GlobalFree(mem);
         return error.OpenClipBoardFailed;
     }
@@ -545,7 +545,7 @@ pub fn copy_to_windows_clipboard(text: []const u8) !void {
 }
 
 pub fn request_windows_clipboard(allocator: std.mem.Allocator) ![]u8 {
-    if (win32.OpenClipboard(null) == 0)
+    if (win32.OpenClipboard(null) == .FALSE)
         return error.OpenClipBoardFailed;
     defer _ = win32.CloseClipboard();
 

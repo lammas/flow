@@ -665,11 +665,22 @@ pub fn guess_file_type(file_path: []const u8) struct { []const u8, []const u8, u
 }
 
 fn safe_file_read(self: std.Io.File, buffer: []u8) (error{ FileHandleInvalidForReading, ProcessNotFound, ConnectionTimedOut } || std.Io.File.ReadStreamingError)!usize {
-    if (builtin.os.tag == .windows) {
-        return std.os.windows.ReadFile(self.handle, buffer, null);
-    }
+    return switch (builtin.os.tag) {
+        .windows => safe_windows_read(self.handle, buffer),
+        else => safe_posix_read(self.handle, buffer),
+    };
+}
 
-    return safe_posix_read(self.handle, buffer);
+fn safe_windows_read(handle: std.os.windows.HANDLE, buffer: []u8) (error{ FileHandleInvalidForReading, ProcessNotFound, ConnectionTimedOut } || std.Io.File.ReadStreamingError)!usize {
+    const windows = std.os.windows;
+    const ReadFile = struct {
+        extern "kernel32" fn ReadFile(hFile: windows.HANDLE, lpBuffer: ?[*]u8, nNumberOfBytesToRead: windows.DWORD, lpNumberOfBytesRead: ?*windows.DWORD, lpOverlapped: ?*anyopaque) callconv(.winapi) windows.BOOL;
+    }.ReadFile;
+    var bytes_read: windows.DWORD = 0;
+    const len: windows.DWORD = @intCast(@min(buffer.len, std.math.maxInt(windows.DWORD)));
+    if (ReadFile(handle, buffer.ptr, len, &bytes_read, null) == .FALSE)
+        return windows.unexpectedError(windows.GetLastError());
+    return @intCast(bytes_read);
 }
 
 fn safe_posix_read(fd: std.posix.fd_t, buf: []u8) (error{ FileHandleInvalidForReading, ConnectionTimedOut, ProcessNotFound } || std.Io.File.ReadStreamingError)!usize {
@@ -679,9 +690,6 @@ fn safe_posix_read(fd: std.posix.fd_t, buf: []u8) (error{ FileHandleInvalidForRe
     const system = std.posix.system;
     const errno = std.posix.errno;
     if (buf.len == 0) return 0;
-    if (native_os == .windows) {
-        return std.os.windows.ReadFile(fd, buf, null);
-    }
     if (native_os == .wasi and !builtin.link_libc) {
         const iovec = std.os.posix.iovec;
         const wasi = std.os.wasi;
