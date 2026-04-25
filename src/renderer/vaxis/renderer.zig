@@ -497,7 +497,11 @@ pub fn set_terminal_secondary_cursor_color(self: *Self, color: Color) void {
 }
 
 pub fn set_terminal_working_directory(self: *Self, absolute_path: []const u8) void {
-    self.vx.setTerminalWorkingDirectory(self.tty.writer(), absolute_path) catch {};
+    const hostname = switch (builtin.os.tag) {
+        .windows => null,
+        else => root.get_init().environ_map.get("HOSTNAME"),
+    } orelse null;
+    self.vx.setTerminalWorkingDirectory(self.tty.writer(), absolute_path, hostname) catch {};
 }
 
 pub fn copy_to_system_clipboard(self: *Self, text: []const u8) void {
