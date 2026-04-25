@@ -15,7 +15,7 @@ pid: tp.pid_ref,
 
 const Self = @This();
 const module_name = @typeName(Self);
-const request_timeout = std.time.ns_per_s * 5;
+const request_timeout: std.Io.Timeout = .{ .duration = .{ .raw = .fromSeconds(5), .clock = .awake } };
 
 pub const FilePos = Project.FilePos;
 
@@ -104,10 +104,11 @@ pub fn close(project_directory: []const u8) (ProjectManagerError || error{CloseC
 }
 
 pub fn request_n_most_recent_file(allocator: std.mem.Allocator, n: usize) (CallError || ProjectError || cbor.Error)!?[]const u8 {
+    const io = root.get_init().io;
     const project = tp.env.get().str("project");
     if (project.len == 0)
         return error.NoProject;
-    const rsp = try (try get()).pid.call(allocator, request_timeout, .{ "request_n_most_recent_file", project, n });
+    const rsp = try (try get()).pid.call(io, allocator, request_timeout, .{ "request_n_most_recent_file", project, n });
     defer allocator.free(rsp.buf);
     var file_path: []const u8 = undefined;
     return if (try cbor.match(rsp.buf, .{tp.extract(&file_path)})) try allocator.dupe(u8, file_path) else null;
@@ -165,10 +166,11 @@ pub fn request_path_files(max: usize, path: []const u8) (ProjectManagerError || 
 }
 
 pub fn request_tasks(allocator: std.mem.Allocator) (ProjectError || CallError)!tp.message {
+    const io = root.get_init().io;
     const project = tp.env.get().str("project");
     if (project.len == 0)
         return error.NoProject;
-    return (try get()).pid.call(allocator, request_timeout, .{ "request_tasks", project });
+    return (try get()).pid.call(io, allocator, request_timeout, .{ "request_tasks", project });
 }
 
 pub fn request_vcs_status() (ProjectManagerError || ProjectError)!void {
