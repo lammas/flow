@@ -534,6 +534,7 @@ fn receive_safe(self: *Self, from: tp.pid_ref, m: tp.message) !void {
             try m.match(.{ tp.string, "timeout_error", 125, "Operation aborted." }) or //linux
             try m.match(.{ tp.string, "timeout_error", 995, tp.more }) or // windows -> "The I/O operation has been aborted because of either a thread exit or an application request."
             try m.match(.{ tp.string, "timeout_error", 89, "Operation aborted." }) or //macos
+            try m.match(.{ tp.string, "timeout_error", 85, "Operation aborted." }) or //freebsd
             try m.match(.{ tp.string, "DEADSEND", tp.more }) or
             try m.match(.{ tp.string, "error.LspFailed", tp.more }) or
             try m.match(.{ tp.string, "error.NoLsp", tp.more }))
