@@ -4187,6 +4187,30 @@ pub const Editor = struct {
     }
     pub const add_cursor_next_match_meta: Meta = .{ .description = "Add cursor at next highlighted match", .arguments = &.{.integer} };
 
+    pub fn add_cursor_prev_match(self: *Self, ctx: Context) Result {
+        try self.send_editor_jump_source();
+        var repeat: usize = 1;
+        _ = ctx.args.match(.{tp.extract(&repeat)}) catch false;
+        while (repeat > 0) : (repeat -= 1) {
+            if (self.matches.items.len == 0) {
+                const root = self.buf_root() catch return;
+                self.with_cursors_const_once(root, move_cursor_word_begin) catch {};
+                try self.with_selections_const_once(root, move_cursor_word_end);
+            } else if (self.get_prev_match(self.get_primary().cursor)) |match| {
+                if (self.get_primary().selection) |_|
+                    try self.push_cursor();
+                const primary = self.get_primary();
+                const root = self.buf_root() catch return;
+                primary.selection = match.to_selection();
+                match.has_selection = true;
+                primary.cursor.move_to(root, match.end.row, match.end.col, self.metrics) catch return;
+            }
+        }
+        self.clamp();
+        try self.send_editor_jump_destination();
+    }
+    pub const add_cursor_prev_match_meta: Meta = .{ .description = "Add cursor at previous highlighted match", .arguments = &.{.integer} };
+
     pub fn add_cursor_all_matches(self: *Self, _: Context) Result {
         if (self.matches.items.len == 0) return;
         try self.send_editor_jump_source();
@@ -4491,15 +4515,17 @@ pub const Editor = struct {
     }
     pub const toggle_comment_meta: Meta = .{ .description = "Toggle comment" };
 
-    fn indent_cursor(self: *Self, root: Buffer.Root, cursor: Cursor, no_blank_line: bool, allocator: Allocator) error{Stop}!Buffer.Root {
+    fn indent_cursor(self: *Self, root_: Buffer.Root, cursor: Cursor, no_blank_line: bool, allocator: Allocator) error{Stop}!Buffer.Root {
         const space = "                                ";
         var cursel: CurSel = .{};
         cursel.cursor = cursor;
+        var root = root_;
         try move_cursor_begin(root, &cursel.cursor, self.metrics);
         if (no_blank_line and (root.line_width(cursel.cursor.row, self.metrics) catch 0 == 0))
             return root;
         switch (self.indent_mode) {
             .spaces, .auto => {
+                root = try self.expand_tabs(root, cursel.cursor.row, allocator);
                 const cols = self.indent_size - find_first_non_ws(root, cursel.cursor.row, self.metrics) % self.indent_size;
                 return self.insert(root, &cursel, space[0..cols], allocator) catch return error.Stop;
             },
@@ -4538,8 +4564,38 @@ pub const Editor = struct {
     }
     pub const indent_meta: Meta = .{ .description = "Indent current line (or pop tabstop)", .arguments = &.{.integer} };
 
-    fn unindent_cursor(self: *Self, root: Buffer.Root, cursor: *Cursor, cursor_protect: ?*Cursor, allocator: Allocator) error{Stop}!Buffer.Root {
-        var newroot = root;
+    fn expand_tabs(self: *Self, root_: Buffer.Root, row: usize, allocator: Allocator) error{Stop}!Buffer.Root {
+        var col: usize = 0;
+        var root = root_;
+        var tab_width = self.tab_width;
+        while (true) {
+            const cursor: Cursor = .{ .row = row, .col = col };
+            const egc, _, _ = cursor.egc_at(root, self.metrics) catch return root;
+            if (egc[0] == ' ') {
+                col += 1;
+                tab_width -= 1;
+                if (tab_width == 0)
+                    tab_width = self.tab_width;
+                continue;
+            }
+            if (egc[0] != '\t') return root;
+
+            var cursel: CurSel = .{
+                .cursor = cursor,
+                .selection = .{
+                    .begin = cursor,
+                    .end = .{ .row = row, .col = col + tab_width },
+                },
+            };
+            const space = "                                ";
+            root = self.insert(root, &cursel, space[0..tab_width], allocator) catch return root;
+            col += tab_width;
+            tab_width = self.tab_width;
+        }
+    }
+
+    fn unindent_cursor(self: *Self, root_: Buffer.Root, cursor: *Cursor, cursor_protect: ?*Cursor, allocator: Allocator) error{Stop}!Buffer.Root {
+        var root = root_;
         var cursel: CurSel = .{};
         cursel.cursor = cursor.*;
         const first = find_first_non_ws(root, cursel.cursor.row, self.metrics);
@@ -4554,12 +4610,14 @@ pub const Editor = struct {
             cp.col = first + 1;
             saved = true;
         };
-        newroot = try self.delete_selection(root, &cursel, allocator);
+        if (self.indent_mode == .spaces)
+            root = try self.expand_tabs(root, cursel.cursor.row, allocator);
+        root = try self.delete_selection(root, &cursel, allocator);
         if (cursor_protect) |cp| if (saved) {
             try cp.move_to(root, cp.row, first - cols, self.metrics);
-            cp.clamp_to_buffer(newroot, self.metrics);
+            cp.clamp_to_buffer(root, self.metrics);
         };
-        return newroot;
+        return root;
     }
 
     fn unindent_cursel(self: *Self, root_: Buffer.Root, cursel: *CurSel, allocator: Allocator) error{Stop}!Buffer.Root {
@@ -7406,7 +7464,7 @@ pub const Editor = struct {
         try self.update_buf(root);
         self.clamp();
     }
-    pub const toggle_case_meta: Meta = .{ .description = "Toggle the case of each character in selection or character at cursor" };
+    pub const toggle_case_meta: Meta = .{ .description = "Toggle the case of each character in selection or word" };
 
     pub fn forced_mark_clean(self: *Self, _: Context) Result {
         if (self.buffer) |b| {
