@@ -8,7 +8,7 @@ pub fn build(b: *std.Build) void {
     const tracy_enabled = b.option(bool, "enable_tracy", "Enable tracy client library (default: no)") orelse false;
     const use_tree_sitter = b.option(bool, "use_tree_sitter", "Enable tree-sitter (default: yes)") orelse true;
     const strip = b.option(bool, "strip", "Disable debug information (default: no)");
-    const use_llvm = b.option(bool, "use_llvm", "Enable llvm backend (default: none)");
+    const use_llvm = b.option(bool, "use-llvm", "Enable llvm backend (default: none)");
     const pie = b.option(bool, "pie", "Produce an executable with position independent code (default: none)");
     const gui = b.option(bool, "gui", "Standalone GUI mode") orelse false;
     const test_filters = b.option([]const []const u8, "test-filter", "Skip tests that do not match any filter") orelse &[0][]const u8{};
@@ -345,7 +345,7 @@ pub fn build_exe(
         .target = target,
         .optimize = optimize_deps,
         .use_tree_sitter = use_tree_sitter,
-        .use_llvm = use_llvm,
+        .@"use-llvm" = use_llvm,
     });
     const syntax_mod = syntax_dep.module("syntax");
 
