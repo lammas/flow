@@ -26,8 +26,8 @@
             .hash = "N-V-__8AAJZfLAAP6zSuW13nEIrBBHZM9pbeMRwhvQ-8qqx1",
         },
         .fuzzig = .{
-            .url = "git+https://codeberg.org/fjebaker/fuzzig?ref=main#f13e84c83ea6c957bb4fa78dab51155f58ef2194",
-            .hash = "fuzzig-0.1.2-Ji0xiuhpAQD9Eu9aSosDvN6YHM5_svNb_4ABuXqT0Qza",
+            .url = "git+https://codeberg.org/neurocyte/fuzzig?ref=main#f0903c8128d53d2a928b8c33f9cfda4aad55daa3",
+            .hash = "fuzzig-0.1.2-Ji0xigJqAQDvtmYhobWP8Acum6OwZ8Gbh-__fljWyjZa",
         },
         .vaxis = .{
             .url = "git+https://github.com/neurocyte/libvaxis?ref=main#5eb3d20cb6c7ffdf600e2ede1fbdc18cfde4a97b",
