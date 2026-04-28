@@ -701,10 +701,8 @@ pub fn build_exe(
     if (use_llvm) |value| {
         exe.use_llvm = value;
         exe.use_lld = value;
-    } else if (target.result.os.tag != .macos) {
-        exe.use_llvm = true;
-        exe.use_lld = true;
     }
+
     if (pie) |value| exe.pie = value;
     exe.root_module.addImport("build_options", options_mod);
     exe.root_module.addImport("soft_root", soft_root_mod);
