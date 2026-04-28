@@ -11,9 +11,7 @@ const sep = std.fs.path.sep;
 const list_languages = @import("list_languages.zig");
 const file_link = @import("file_link");
 
-const c = @cImport({
-    @cInclude("locale.h");
-});
+const c = @import("c");
 
 const build_options = @import("build_options");
 const log = @import("log");

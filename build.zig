@@ -725,6 +725,13 @@ pub fn build_exe(
     exe.root_module.addImport("version", b.createModule(.{ .root_source_file = version_file }));
     exe.root_module.addImport("version_info", b.createModule(.{ .root_source_file = version_info_file }));
 
+    const c_step = b.addTranslateC(.{
+        .root_source_file = b.path("src/c.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport("c", c_step.createModule());
+
     if (target.result.os.tag == .windows) {
         exe.root_module.addWin32ResourceFile(.{
             .file = b.path("src/win32/flow.rc"),
