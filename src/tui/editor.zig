@@ -4857,6 +4857,76 @@ pub const Editor = struct {
     }
     pub const move_buffer_end_meta: Meta = .{ .description = "Move cursor to end of file" };
 
+    fn move_cursor_to_next_empty_line(root: Buffer.Root, cursor: *Cursor, metrics: Buffer.Metrics) !void {
+        var seen_popd = false;
+        while (true) {
+            const line_width = root.line_width(cursor.row, metrics) catch return;
+            if (line_width > 0)
+                seen_popd = true
+            else if (seen_popd)
+                return;
+            cursor.move_down(root, metrics) catch |e| switch (e) {
+                error.Stop => {
+                    cursor.move_end(root, metrics);
+                    return;
+                },
+            };
+        }
+    }
+
+    fn move_cursor_to_prev_empty_line(root: Buffer.Root, cursor: *Cursor, metrics: Buffer.Metrics) !void {
+        var seen_popd = false;
+        while (true) {
+            const line_width = root.line_width(cursor.row, metrics) catch return;
+            if (line_width > 0)
+                seen_popd = true
+            else if (seen_popd)
+                return;
+            cursor.move_up(root, metrics) catch |e| switch (e) {
+                error.Stop => {
+                    cursor.move_begin();
+                    return;
+                },
+            };
+        }
+    }
+
+    pub fn move_par_end(self: *Self, ctx: Context) Result {
+        const root = try self.buf_root();
+        self.with_cursors_const_repeat(root, move_cursor_to_next_empty_line, ctx) catch {};
+        self.clamp();
+    }
+    pub const move_par_end_meta: Meta = .{ .description = "Move to end of paragraph", .arguments = &.{.integer} };
+
+    pub fn move_par_begin(self: *Self, ctx: Context) Result {
+        const root = try self.buf_root();
+        self.with_cursors_const_repeat(root, move_cursor_to_prev_empty_line, ctx) catch {};
+        self.clamp();
+    }
+    pub const move_par_begin_meta: Meta = .{ .description = "Move to beginning of paragraph", .arguments = &.{.integer} };
+
+    pub fn select_par_end(self: *Self, ctx: Context) Result {
+        const root = try self.buf_root();
+        self.with_selections_const_repeat(root, move_cursor_to_next_empty_line, ctx) catch {};
+        self.clamp();
+    }
+    pub const select_par_end_meta: Meta = .{ .description = "Select to end of paragraph", .arguments = &.{.integer} };
+
+    pub fn select_par_begin(self: *Self, ctx: Context) Result {
+        const root = try self.buf_root();
+        self.with_selections_const_repeat(root, move_cursor_to_prev_empty_line, ctx) catch {};
+        self.clamp();
+    }
+    pub const select_par_begin_meta: Meta = .{ .description = "Select to beginning of paragraph", .arguments = &.{.integer} };
+
+    pub fn select_par(self: *Self, ctx: Context) Result {
+        const root = try self.buf_root();
+        self.with_cursors_const_once(root, move_cursor_to_prev_empty_line) catch {};
+        self.with_selections_const_repeat(root, move_cursor_to_next_empty_line, ctx) catch {};
+        self.clamp();
+    }
+    pub const select_par_meta: Meta = .{ .description = "Select paragraph", .arguments = &.{.integer} };
+
     pub fn cancel(self: *Self, _: Context) Result {
         self.clear_info_box();
         self.cancel_all_tabstops();
