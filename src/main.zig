@@ -1193,15 +1193,15 @@ fn restart_win32() noreturn {
         executable,
         "--restore-session",
     };
-    const a = std.heap.c_allocator;
-    var child = std.process.Child.init(&argv, a);
-    child.stdin_behavior = .Inherit;
-    child.stdout_behavior = .Inherit;
-    child.stderr_behavior = .Inherit;
-    child.spawn() catch {
-        std.os.windows.kernel32.ExitProcess(1);
+    _ = std.process.spawn(get_io(), .{
+        .argv = &argv,
+        .stdin = .inherit,
+        .stdout = .inherit,
+        .stderr = .inherit,
+    }) catch {
+        std.os.windows.ntdll.RtlExitUserProcess(1);
     };
-    std.os.windows.kernel32.ExitProcess(0);
+    std.os.windows.ntdll.RtlExitUserProcess(0);
 }
 
 fn restart_manual() noreturn {
