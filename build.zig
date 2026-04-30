@@ -565,6 +565,7 @@ pub fn build_exe(
         tests.root_module.addImport("log", log_mod);
         tests.root_module.addImport("Buffer", Buffer_mod);
         tests.root_module.addImport("config", config_mod);
+        tests.root_module.addImport("soft_root", soft_root_mod);
         // b.installArtifact(tests);
         break :blk b.addRunArtifact(tests);
     };
