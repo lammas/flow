@@ -700,9 +700,9 @@ const cmds = struct {
         const file_name = try file_type_config.get_config_file_path(self.allocator, file_type_name);
         defer self.allocator.free(file_name);
 
-        const file: ?std.Io.File = std.Io.Dir.openFileAbsolute(root.get_init().io, file_name, .{ .mode = .read_only }) catch null;
+        const file: ?std.Io.File = std.Io.Dir.openFileAbsolute(root.get_io(), file_name, .{ .mode = .read_only }) catch null;
         if (file) |f| {
-            f.close(root.get_init().io);
+            f.close(root.get_io());
             return tp.self_pid().send(.{ "cmd", "navigate", .{ .file = file_name } });
         }
 

@@ -412,6 +412,7 @@ pub fn build_exe(
             .{ .name = "thespian", .module = thespian_mod },
             .{ .name = "log", .module = log_mod },
             .{ .name = "cbor", .module = cbor_mod },
+            .{ .name = "soft_root", .module = soft_root_mod },
         },
     });
 

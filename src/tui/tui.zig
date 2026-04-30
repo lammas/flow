@@ -198,7 +198,7 @@ fn init(allocator: Allocator) InitError!*Self {
             .{"init"},
         )),
         .no_sleep = tp.env.get().is("no-sleep"),
-        .query_cache_ = try syntax.QueryCache.create(root.get_init().io, allocator, .{}),
+        .query_cache_ = try syntax.QueryCache.create(root.get_io(), allocator, .{}),
         .dark_theme = dark_theme,
         .light_theme = light_theme,
     };
