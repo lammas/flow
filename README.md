@@ -65,11 +65,12 @@ updates from the development team.
 - Multi-terminal sessions
 
 
-# Download / Install
+# Installer and manual downloads
 
 There is an [installation guide](https://flow-control.dev/installation) on
-the main website, and source, release and nightly build binary
-[downloads](https://flow-control.dev/downloads).
+the main website with instructions for using the installer script. Direct
+downloads of source tarballs and release and nightly binary builds are
+listed on the [downloads](https://flow-control.dev/downloads) page.
 
 Or check your favorite local system package repository.
 
