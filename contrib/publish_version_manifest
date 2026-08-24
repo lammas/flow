@@ -1,0 +1,111 @@
+#!/bin/sh
+set -e
+
+fingerprint="4E6CF7234FFC4E14531074F98EB1E1BB660E3FB9"
+destination="flow-control.dev:/srv/flow-control.dev/html/"
+basedir="$(cd "$(dirname "$0")/.." && pwd)"
+staging="$basedir/version-manifest"
+
+usage() {
+    echo "usage: publish_version_manifest sign    [--nightly] <version>"
+    echo "       publish_version_manifest publish [--nightly] [--force] <version>"
+    echo
+    echo "  sign      create and sign a manifest"
+    echo "  publish   upload the staged manifest"
+    echo
+    echo "  --nightly   version-latest-nightly instead of version-latest"
+    echo "  --force     publish even if the release assets are not downloadable"
+    exit 1
+}
+
+stage=""
+nightly=0
+force=0
+version=""
+
+case "${1:-}" in
+sign | publish)
+    stage="$1"
+    shift
+    ;;
+*) usage ;;
+esac
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+    --nightly) nightly=1 ;;
+    --force) force=1 ;;
+    -h | --help) usage ;;
+    -*)
+        echo "unknown option: $1"
+        usage
+        ;;
+    *)
+        [ -z "$version" ] || usage
+        version="$1"
+        ;;
+    esac
+    shift
+done
+
+[ -n "$version" ] || usage
+
+case "$version" in
+*[!A-Za-z0-9._+-]*)
+    echo "refusing to handle an implausible release tag: $version"
+    exit 1
+    ;;
+esac
+
+if [ "$nightly" -eq 1 ]; then
+    manifest="version-latest-nightly"
+    repo="neurocyte/flow-nightly"
+    nightly_flag=" --nightly"
+else
+    manifest="version-latest"
+    repo="neurocyte/flow"
+    nightly_flag=""
+fi
+
+if [ "$stage" = "sign" ]; then
+    mkdir -p "$staging"
+    echo "$version" >"$staging/$manifest"
+    gpg --local-user "$fingerprint" \
+        --detach-sign --armor --yes \
+        --output "$staging/$manifest.sig" "$staging/$manifest"
+    gpg --verify "$staging/$manifest.sig" "$staging/$manifest"
+    echo "signed $manifest = $version in $staging"
+    exit 0
+fi
+
+if [ ! -e "$staging/$manifest" ] || [ ! -e "$staging/$manifest.sig" ]; then
+    echo "error: there is no signed $manifest in $staging"
+    echo "run: contrib/publish_version_manifest sign$nightly_flag $version"
+    exit 1
+fi
+
+staged_version=$(tr -d ' \t\r\n' <"$staging/$manifest")
+if [ "$staged_version" != "$version" ]; then
+    echo "error: $staging/$manifest says $staged_version, not $version"
+    echo "it is stale; re-run the sign stage"
+    exit 1
+fi
+
+gpg --verify "$staging/$manifest.sig" "$staging/$manifest"
+
+if [ "$force" -eq 0 ]; then
+    canary="flow-$version-linux-x86_64.tar.gz"
+    echo "checking that $canary is downloadable..."
+    if ! curl -fsIL -o /dev/null "https://codeberg.org/$repo/releases/download/$version/$canary" &&
+        ! curl -fsIL -o /dev/null "https://github.com/$repo/releases/download/$version/$canary"; then
+        echo "error: $canary is not downloadable from codeberg or github"
+        echo "upload the release assets first, or pass --force"
+        exit 1
+    fi
+fi
+
+rsync -av "$staging/$manifest" "$staging/$manifest.sig" "$destination"
+rm -f "$staging/$manifest" "$staging/$manifest.sig"
+rmdir "$staging" 2>/dev/null || true
+
+echo "published $manifest = $version"

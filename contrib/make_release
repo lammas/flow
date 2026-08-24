@@ -47,6 +47,8 @@ done
 cd ..
 rm -r build
 
+"$BASEDIR/contrib/publish_version_manifest" sign "$VERSION"
+
 TARFILES=$(/bin/ls)
 
 for tarfile in $TARFILES; do
@@ -59,3 +61,9 @@ echo "done making release $VERSION @ $DESTDIR"
 echo
 
 /bin/ls -lah
+
+echo
+echo "once the release assets are uploaded, publish the version manifest so"
+echo "that the installers start offering $VERSION:"
+echo
+echo "    contrib/publish_version_manifest publish $VERSION"

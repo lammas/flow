@@ -8,12 +8,14 @@ for arg in "$@"; do
     --no-codeberg) NO_CODEBERG=1 ;;
     --no-flowcontrol) NO_FLOWCONTROL=1 ;;
     --no-aur) NO_AUR=1 ;;
+    --no-manifest) NO_MANIFEST=1 ;;
     --allow-dirty)
         ALLOW_DIRTY=1
         NO_GITHUB=1
         NO_CODEBERG=1
         NO_FLOWCONTROL=1
         NO_AUR=1
+        NO_MANIFEST=1
         ;;
     esac
 done
@@ -127,6 +129,14 @@ done
 cd ..
 rm -r build
 
+if [ -n "$NO_CODEBERG" ] && [ -n "$NO_GITHUB" ]; then
+    echo "skipping version manifest: neither download mirror will be updated"
+    NO_MANIFEST=1
+fi
+if [ -z "$NO_MANIFEST" ]; then
+    "$BASEDIR/contrib/publish_version_manifest" sign --nightly "$VERSION"
+fi
+
 TARFILES=$(/bin/ls)
 
 for tarfile in $TARFILES; do
@@ -212,4 +222,8 @@ if [ -z "$NO_AUR" ]; then
     cd flow-control-nightly-bin
     git push
     cd ..
+fi
+
+if [ -z "$NO_MANIFEST" ]; then
+    "$BASEDIR/contrib/publish_version_manifest" publish --nightly "$VERSION"
 fi
