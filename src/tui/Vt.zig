@@ -163,6 +163,16 @@ pub fn set_title(self: *@This(), title: []const u8) void {
     self.title.appendSlice(self.vt.allocator, title) catch {};
 }
 
+fn set_app_title(self: *@This(), title: []const u8) void {
+    if (builtin.os.tag == .windows) {
+        if (self.vt.cmd.argv.len > 0 and std.mem.eql(u8, title, self.vt.cmd.argv[0]))
+            return;
+        if (std.fs.path.isAbsoluteWindows(title))
+            return self.set_title(std.fs.path.basenameWindows(title));
+    }
+    self.set_title(title);
+}
+
 fn process_terminal_event(ctx: *Terminal.Event.HandlerContext, event: Terminal.Event) error{TerminalHandlerFailed}!void {
     const self: *@This() = @ptrCast(@alignCast(ctx));
     return self.process_event(event) catch error.TerminalHandlerFailed;
@@ -188,7 +198,7 @@ pub fn process_event(self: *@This(), event: Terminal.Event) !void {
             self.cwd.appendSlice(self.vt.allocator, path) catch {};
         },
         .title_change => |t| {
-            self.set_title(t);
+            self.set_app_title(t);
         },
         .color_change => |cc| {
             self.app_fg = cc.fg;
