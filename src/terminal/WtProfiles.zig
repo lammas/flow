@@ -56,13 +56,13 @@ pub fn parse(allocator: std.mem.Allocator, data: []const u8) Error![]Profile {
 
     if (default_guid) |guid| for (list.items) |item| {
         if (!guidEql(item, guid)) continue;
-        try append(allocator, &result, item);
+        try append(allocator, &result, item, true);
         break;
     };
 
     for (list.items) |item| {
         if (default_guid) |guid| if (guidEql(item, guid)) continue;
-        try append(allocator, &result, item);
+        try append(allocator, &result, item, false);
     }
 
     return result.toOwnedSlice(allocator);
@@ -74,11 +74,13 @@ fn append(
     allocator: std.mem.Allocator,
     list: *std.ArrayList(Profile),
     item: std.json.Value,
+    is_default: bool,
 ) std.mem.Allocator.Error!void {
     if (item != .object) return;
     const obj = item.object;
 
-    if (obj.get("hidden")) |v| if (v == .bool and v.bool) return;
+    // Windows Terminal ignores "hidden" on the default profile
+    if (!is_default) if (obj.get("hidden")) |v| if (v == .bool and v.bool) return;
 
     const name_str = if (obj.get("name")) |v| asString(v) orelse "" else "";
 
