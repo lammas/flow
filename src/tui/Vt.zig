@@ -125,6 +125,7 @@ pub fn paste(self: *@This(), text: []const u8) void {
 }
 
 pub fn kill(self: *@This()) void {
+    if (self.on_exit == .hold_on_error) self.on_exit = .close;
     self.vt.killForeground();
 }
 
