@@ -310,34 +310,40 @@ inline fn render_line_highlight(self: *Self, pos: usize, theme: *const Widget.Th
     }
 }
 
+inline fn diff_symbol_end(sym: Diff) usize {
+    return sym.line + if (sym.kind == .delete) 1 else @max(sym.lines, 1);
+}
+
 inline fn render_diff_symbols(self: *Self, diff_symbols: *[]Diff, pos: usize, linenum_: usize, theme: *const Widget.Theme) void {
     if (!tui.config().gutter_diffs) return;
     const linenum = linenum_ - 1;
     if (diff_symbols.len == 0) return;
-    while ((diff_symbols.*)[0].line < linenum) {
+    while (diff_symbol_end((diff_symbols.*)[0]) <= linenum) {
         diff_symbols.* = (diff_symbols.*)[1..];
         if (diff_symbols.len == 0) return;
     }
 
     if ((diff_symbols.*)[0].line > linenum) return;
 
-    while ((diff_symbols.*)[0].line == linenum) {
-        self.render_diff((diff_symbols.*)[0], pos, theme);
+    while ((diff_symbols.*)[0].line <= linenum) {
+        self.render_diff((diff_symbols.*)[0], pos, linenum, theme);
         diff_symbols.* = (diff_symbols.*)[1..];
         if (diff_symbols.len == 0) return;
     }
 }
 
-inline fn render_diff(self: *Self, sym: Diff, pos: usize, theme: *const Widget.Theme) void {
+inline fn render_diff(self: *Self, sym: Diff, pos: usize, linenum: usize, theme: *const Widget.Theme) void {
     const char = switch (sym.kind) {
         .insert => "┃",
         .modify => "┃",
         .delete => "▔",
     };
 
-    var lines = if (sym.kind == .delete) 1 else sym.lines;
-    while (lines > 0) : (lines -= 1) {
-        self.plane.cursor_move_yx(@intCast(pos + lines - 1), @intCast(self.get_width() - 1));
+    const end = diff_symbol_end(sym);
+    if (end <= linenum) return;
+    var rows = @min(end - linenum, self.view_rows -| pos);
+    while (rows > 0) : (rows -= 1) {
+        self.plane.cursor_move_yx(@intCast(pos + rows - 1), @intCast(self.get_width() - 1));
         var cell = self.plane.cell_init();
         _ = self.plane.at_cursor_cell(&cell) catch return;
         cell.set_style_fg(switch (sym.kind) {
