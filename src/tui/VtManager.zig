@@ -129,6 +129,13 @@ pub fn prev(current: ?*const Vt) ?*Vt {
     return vts.items[(i + vts.items.len - 1) % vts.items.len];
 }
 
+pub fn reap_ref(ref: usize) void {
+    for (vts.items) |vt| if (@intFromPtr(vt) == ref) {
+        if (vt.process_exited) vt.deinit(vt.vt.allocator);
+        return;
+    };
+}
+
 pub fn reap_exited(keep: ?*const Vt) void {
     var i: usize = 0;
     while (i < vts.items.len) {

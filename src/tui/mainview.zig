@@ -1307,21 +1307,24 @@ const cmds = struct {
     }
     pub const close_terminal_meta: Meta = .{ .description = "Close terminal" };
 
-    pub fn close_terminal_on_exit(self: *Self, _: Ctx) Result {
+    pub fn close_terminal_on_exit(self: *Self, ctx: Ctx) Result {
+        var ref: usize = 0;
+        if (!(cbor.match(ctx.args.buf, .{tp.extract(&ref)}) catch false and ref != 0)) return;
+
         const tv = self.get_panel_view(terminal_view) orelse {
-            Vt.Manager.reap_exited(null);
+            Vt.Manager.reap_ref(ref);
             return;
         };
-        if (tv.vt.process_exited) {
+
+        if (@intFromPtr(tv.vt) == ref)
             if (Vt.Manager.running_except(tv.vt)) |next| {
                 tv.attach(next);
             } else {
                 try self.toggle_panel_view(terminal_view, .disable);
-                Vt.Manager.reap_exited(null);
                 return;
-            }
-        }
-        Vt.Manager.reap_exited(tv.vt);
+            };
+
+        Vt.Manager.reap_ref(ref);
     }
     pub const close_terminal_on_exit_meta: Meta = .{};
 
