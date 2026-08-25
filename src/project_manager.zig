@@ -382,7 +382,11 @@ pub fn same_directory(path: []const u8, dir: []const u8) bool {
     const b = strip_trailing_separators(dir);
     if (a.len != b.len) return false;
     if (builtin.os.tag != .windows) return std.mem.eql(u8, a, b);
-    // windows paths are case insensitive and accept either separator
+    return eql_path_windows(a, b);
+}
+
+fn eql_path_windows(a: []const u8, b: []const u8) bool {
+    if (a.len != b.len) return false;
     for (a, b) |ca, cb| {
         const la = if (ca == '\\') '/' else std.ascii.toLower(ca);
         const lb = if (cb == '\\') '/' else std.ascii.toLower(cb);
@@ -1317,7 +1321,7 @@ pub fn normalize_file_path(file_path: []const u8, file_path_buf: []u8) []const u
 
 pub fn abbreviate_home(buf: []u8, path: []const u8) []const u8 {
     const a = std.heap.c_allocator;
-    if (builtin.os.tag == .windows) return path;
+    if (builtin.os.tag == .windows) return abbreviate_home_windows(buf, path);
     if (!std.fs.path.isAbsolute(path)) return path;
     const homedir = root.get_init().environ_map.get("HOME") orelse return path;
     const homerelpath = std.fs.path.relative(a, "/", root.get_init().environ_map, homedir, path) catch return path;
@@ -1337,7 +1341,7 @@ pub fn abbreviate_home(buf: []u8, path: []const u8) []const u8 {
 }
 
 pub fn expand_home(allocator: std.mem.Allocator, buf: *std.ArrayList(u8), file_path: []const u8) []const u8 {
-    if (builtin.os.tag == .windows) return file_path;
+    if (builtin.os.tag == .windows) return expand_home_windows(allocator, buf, file_path);
     if (file_path.len > 0 and file_path[0] == '~') {
         if (file_path.len > 1 and file_path[1] != std.fs.path.sep) return file_path;
         const homedir = root.get_init().environ_map.get("HOME") orelse return file_path;
@@ -1346,4 +1350,28 @@ pub fn expand_home(allocator: std.mem.Allocator, buf: *std.ArrayList(u8), file_p
         buf.appendSlice(allocator, file_path[2..]) catch return file_path;
         return buf.items;
     } else return file_path;
+}
+
+fn abbreviate_home_windows(buf: []u8, path: []const u8) []const u8 {
+    const homedir = root.get_init().environ_map.get("USERPROFILE") orelse return path;
+    const home = strip_trailing_separators(homedir);
+    if (home.len == 0 or path.len < home.len) return path;
+    if (!eql_path_windows(path[0..home.len], home)) return path;
+    const rest = path[home.len..];
+    if (rest.len == 0) return "~";
+    if (!std.fs.path.isSep(rest[0])) return path;
+    if (rest.len + 1 > buf.len) return path;
+    std.mem.copyForwards(u8, buf[1 .. rest.len + 1], rest);
+    buf[0] = '~';
+    return buf[0 .. rest.len + 1];
+}
+
+fn expand_home_windows(allocator: std.mem.Allocator, buf: *std.ArrayList(u8), file_path: []const u8) []const u8 {
+    if (file_path.len == 0 or file_path[0] != '~') return file_path;
+    if (file_path.len > 1 and !std.fs.path.isSep(file_path[1])) return file_path;
+    const homedir = root.get_init().environ_map.get("USERPROFILE") orelse return file_path;
+    const home = strip_trailing_separators(homedir);
+    buf.appendSlice(allocator, home) catch return file_path;
+    buf.appendSlice(allocator, file_path[1..]) catch return file_path;
+    return buf.items;
 }
