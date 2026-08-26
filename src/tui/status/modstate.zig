@@ -72,9 +72,25 @@ fn render_modifier(self: *Self, state: bool, off: [:0]const u8, on: [:0]const u8
 
 pub fn listen(self: *Self, _: tp.pid_ref, m: tp.message) tp.result {
     var mods: input.Mods = 0;
+    var mouse_type: MouseEvent.Type = .motion;
+    var mouse_mods: MouseEvent.Modifiers = .{};
     if (try m.match(.{ "I", tp.any, tp.any, tp.any, tp.any, tp.extract(&mods), tp.more })) {
-        self.mods = @bitCast(mods);
+        self.set_mods(@bitCast(mods));
+    } else if (try m.match(.{ tp.extract(&mouse_type), tp.any, tp.any, tp.extract(&mouse_mods) })) {
+        var new = self.mods;
+        new.shift = mouse_mods.shift;
+        new.alt = mouse_mods.alt;
+        new.ctrl = mouse_mods.ctrl;
+        new.super = mouse_mods.super;
+        self.set_mods(new);
     }
+}
+
+fn set_mods(self: *Self, mods: input.ModSet) void {
+    if (std.meta.eql(self.mods, mods)) return;
+    self.mods = mods;
+    // Mouse motion does not otherwise schedule a render.
+    tui.need_render(@src());
 }
 
 pub fn receive(self: *Self, _: tp.pid_ref, m: tp.message) error{Exit}!bool {
