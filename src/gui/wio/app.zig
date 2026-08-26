@@ -1126,7 +1126,6 @@ fn wioLoop() void {
                     sendMouse(.press, @enumFromInt(btn_id), mouse_pos, mouseMods(e.modifiers));
                 },
                 .focused => {
-                    _ = syncModifiers(wio_modifiers, null);
                     window.enableTextInput(.{});
                     tui_pid.send(.{"focus_in"}) catch {};
                     if (render_pid) |*rp| rp.send(.{"focus_in"}) catch {};
@@ -1161,6 +1160,8 @@ fn wioLoop() void {
                 },
             }
         }
+
+        _ = syncModifiers(wio_modifiers, null);
 
         // Apply pending cross-thread requests from the TUI thread.
         if (title_dirty.swap(false, .acq_rel)) {
