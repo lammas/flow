@@ -193,6 +193,10 @@ var clipboard_write: ?[]u8 = null;
 // Clipboard read request
 var clipboard_read_pending: std.atomic.Value(bool) = .init(false);
 
+fn clipboardText(_: ?*anyopaque, text: []const u8) void {
+    tui_pid.send(.{ "RDR", "system_clipboard", text }) catch {};
+}
+
 // Mouse cursor (stored as wio.Cursor tag value)
 var pending_cursor: std.atomic.Value(u8) = .init(@intFromEnum(wio.Cursor.pointer));
 var cursor_dirty: std.atomic.Value(bool) = .init(false);
@@ -1175,10 +1179,7 @@ fn wioLoop() void {
             }
         }
         if (clipboard_read_pending.swap(false, .acq_rel)) {
-            if (window.getClipboardText(allocator)) |text| {
-                defer allocator.free(text);
-                tui_pid.send(.{ "RDR", "system_clipboard", text }) catch {};
-            }
+            window.getClipboardText(clipboardText, null);
         }
         if (cursor_dirty.swap(false, .acq_rel)) {
             window.setCursor(@enumFromInt(pending_cursor.load(.acquire)));
