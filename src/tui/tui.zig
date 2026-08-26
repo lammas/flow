@@ -908,6 +908,7 @@ fn dispatch_mouse(ctx: *anyopaque, coord: MouseEvent.Coord, cbor_msg: []const u8
     const from = tp.self_pid();
     if (!(m.match(.{ MouseEvent.Type.motion, tp.more }) catch false))
         self.unrendered_input_events_count += 1;
+    self.input_listeners_.send(from, m) catch {};
     const send_func = if (self.drag_source) |_| &send_mouse_drag else &send_mouse;
     send_func(self, coord, from, m) catch |e| self.logger.err("dispatch mouse", e);
     var btn: MouseEvent.Button = .none;
@@ -921,6 +922,7 @@ fn dispatch_mouse_drag(ctx: *anyopaque, coord: MouseEvent.Coord, cbor_msg: []con
     const m: tp.message = .{ .buf = cbor_msg };
     const from = tp.self_pid();
     self.unrendered_input_events_count += 1;
+    self.input_listeners_.send(from, m) catch {};
     var btn: MouseEvent.Button = .none;
     if (m.match(.{ tp.any, tp.extract(&btn), tp.more }) catch false)
         if (self.drag_source == null) {
