@@ -800,9 +800,9 @@ fn sendMouse(mouse_type: MouseEvent.Type, button: MouseEvent.Button, pos: wio.Po
     tui_pid.send(.{ "RDR", event }) catch {};
 }
 
-/// The currently held keyboard modifiers, as mouse-report modifiers
-fn currentMouseMods() MouseEvent.Modifiers {
-    const m = input_translate.fromWioModifiers(wio_modifiers);
+/// An event's keyboard modifiers
+fn mouseMods(modifiers: wio.Modifiers) MouseEvent.Modifiers {
+    const m = input_translate.fromWioModifiers(modifiers);
     return .{ .shift = m.shift, .alt = m.alt, .ctrl = m.ctrl, .super = m.super };
 }
 
@@ -1041,12 +1041,12 @@ fn wioLoop() void {
                     // Handled by onWioEventSync - runs inline from the
                     // wndproc so it works during Win32 modal pumps too.
                 },
-                .button_press => |btn| {
+                .button_press => |e| {
+                    const btn = e.button;
                     held_buttons.press(btn);
-                    applyModifierButton(btn, true);
-                    const mods = syncModifiers(btn);
+                    const mods = syncModifiers(e.modifiers, btn);
                     if (input_translate.mouseButtonId(btn)) |mb_id| {
-                        sendMouse(.press, @enumFromInt(mb_id), mouse_pos, currentMouseMods());
+                        sendMouse(.press, @enumFromInt(mb_id), mouse_pos, mouseMods(e.modifiers));
                     } else {
                         if (input_translate.codepointFromButton(btn, .{})) |base_cp| {
                             // Character keys are handled by .char unless modifiers are held.
@@ -1062,8 +1062,9 @@ fn wioLoop() void {
                         }
                     }
                 },
-                .button_repeat => |btn| {
-                    const mods = syncModifiers(btn);
+                .button_repeat => |e| {
+                    const btn = e.button;
+                    const mods = syncModifiers(e.modifiers, btn);
                     if (input_translate.mouseButtonId(btn) == null) {
                         if (input_translate.codepointFromButton(btn, .{})) |base_cp| {
                             // Every backend also emits .char for repeats, so
@@ -1077,12 +1078,12 @@ fn wioLoop() void {
                         }
                     }
                 },
-                .button_release => |btn| {
+                .button_release => |e| {
+                    const btn = e.button;
                     held_buttons.release(btn);
-                    applyModifierButton(btn, false);
-                    const mods = syncModifiers(btn);
+                    const mods = syncModifiers(e.modifiers, btn);
                     if (input_translate.mouseButtonId(btn)) |mb_id| {
-                        sendMouse(.release, @enumFromInt(mb_id), mouse_pos, currentMouseMods());
+                        sendMouse(.release, @enumFromInt(mb_id), mouse_pos, mouseMods(e.modifiers));
                     } else {
                         if (composed.release_key(btn)) |cp| {
                             // Report the codepoint .char composed on press, so
@@ -1097,35 +1098,35 @@ fn wioLoop() void {
                     }
                 },
                 .char => |cp| {
-                    const mods = syncModifiers(null);
+                    const mods = syncModifiers(wio_modifiers, null);
                     const claimed = composed.claim(cp);
                     sendKey(claimed.kind, cp, cp, claimed.base_layout, mods);
                 },
-                .mouse => |pos| {
-                    mouse_pos = pos;
+                .mouse => |e| {
+                    mouse_pos = e.position;
                     if (input_translate.heldMouseButtonId(held_buttons)) |mb_id| {
-                        sendMouse(.drag, @enumFromInt(mb_id), pos, currentMouseMods());
+                        sendMouse(.drag, @enumFromInt(mb_id), e.position, mouseMods(e.modifiers));
                     } else {
-                        sendMouse(.motion, .none, pos, currentMouseMods());
+                        sendMouse(.motion, .none, e.position, mouseMods(e.modifiers));
                     }
                 },
-                .scroll_vertical => |dy| {
-                    if (input_translate.fromWioModifiers(wio_modifiers).ctrl) {
-                        if (dy < 0)
+                .scroll_vertical => |e| {
+                    if (input_translate.fromWioModifiers(e.modifiers).ctrl) {
+                        if (e.delta < 0)
                             adjustFontSize(1) // scrolling up zooms in
                         else
                             adjustFontSize(-1);
                         continue;
                     }
-                    const btn_id: u8 = if (dy < 0) 64 else 65; // up / down scroll
-                    sendMouse(.press, @enumFromInt(btn_id), mouse_pos, currentMouseMods());
+                    const btn_id: u8 = if (e.delta < 0) 64 else 65; // up / down scroll
+                    sendMouse(.press, @enumFromInt(btn_id), mouse_pos, mouseMods(e.modifiers));
                 },
-                .scroll_horizontal => |dx| {
-                    const btn_id: u8 = if (dx < 0) 66 else 67; // left / right scroll
-                    sendMouse(.press, @enumFromInt(btn_id), mouse_pos, currentMouseMods());
+                .scroll_horizontal => |e| {
+                    const btn_id: u8 = if (e.delta < 0) 66 else 67; // left / right scroll
+                    sendMouse(.press, @enumFromInt(btn_id), mouse_pos, mouseMods(e.modifiers));
                 },
                 .focused => {
-                    _ = syncModifiers(null);
+                    _ = syncModifiers(wio_modifiers, null);
                     window.enableTextInput(.{});
                     tui_pid.send(.{"focus_in"}) catch {};
                     if (render_pid) |*rp| rp.send(.{"focus_in"}) catch {};
@@ -1710,20 +1711,9 @@ fn sendKey(kind: u8, codepoint: u21, shifted_codepoint: u21, base_layout_codepoi
     }) catch {};
 }
 
-// Backends disagree on whether .modifiers precedes or follows the button event
-// for a modifier key: x11 and wayland send it first, win32 sends it after.
-fn applyModifierButton(btn: wio.Button, down: bool) void {
-    switch (btn) {
-        .left_shift, .right_shift => wio_modifiers.shift = down,
-        .left_control, .right_control => wio_modifiers.control = down,
-        .left_alt, .right_alt => wio_modifiers.alt = down,
-        .left_gui, .right_gui => wio_modifiers.gui = down,
-        else => {},
-    }
-}
-
-fn syncModifiers(current_button: ?wio.Button) input_translate.Mods {
-    const mods = input_translate.fromWioModifiers(wio_modifiers);
+fn syncModifiers(modifiers: wio.Modifiers, current_button: ?wio.Button) input_translate.Mods {
+    wio_modifiers = modifiers;
+    const mods = input_translate.fromWioModifiers(modifiers);
     // A modifier state change caused by pressing/releasing a modifier key is
     // already reported by the button handler.
     var skip_shift = false;
