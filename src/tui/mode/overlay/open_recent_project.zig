@@ -4,6 +4,8 @@ const tp = @import("thespian");
 const project_manager = @import("project_manager");
 const command = @import("command");
 
+const tui = @import("../../tui.zig");
+
 pub const Type = @import("palette.zig").Create(@This());
 const module_name = @typeName(@This());
 
@@ -61,6 +63,25 @@ pub fn add_menu_entry(palette: *Type, entry: *Entry, matches: ?[]const usize) !v
     try cbor.writeValue(writer, matches orelse &[_]usize{});
     try palette.menu.add_item_with_handler(value.written(), select);
     palette.items += 1;
+}
+
+pub fn complete(palette: *Type, button_: ?*Type.ButtonType) !void {
+    const button = button_ orelse return;
+    var iter = button.opts.label;
+    var project_name: []const u8 = undefined;
+    if (!(cbor.matchString(&iter, &project_name) catch false)) return;
+
+    const input = palette.inputbox.text.items;
+    const completion = if (std.mem.startsWith(u8, project_name, input) and input.len < project_name.len) blk: {
+        const pos = std.mem.indexOfScalarPos(u8, project_name, input.len + 1, std.fs.path.sep) orelse break :blk project_name;
+        break :blk project_name[0 .. pos + 1];
+    } else project_name;
+
+    palette.inputbox.text.shrinkRetainingCapacity(0);
+    try palette.inputbox.text.appendSlice(palette.inputbox.allocator, completion);
+    palette.inputbox.cursor = tui.egc_chunk_width(palette.inputbox.text.items, 0, 8);
+    palette.view_pos = 0;
+    return palette.start_query(0);
 }
 
 fn select(menu: **Type.MenuType, button: *Type.ButtonType, _: Type.Pos) void {
