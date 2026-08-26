@@ -614,7 +614,11 @@ pub fn process_renderer_event(self: *Self, msg: []const u8) Error!void {
             }
 
             const mouse = self.vx.translateMouse(mouse_);
-            try self.sync_mod_state(0, .{ .ctrl = mouse.mods.ctrl, .shift = mouse.mods.shift, .alt = mouse.mods.alt });
+            var mouse_mods = self.mods;
+            mouse_mods.ctrl = mouse.mods.ctrl;
+            mouse_mods.shift = mouse.mods.shift;
+            mouse_mods.alt = mouse.mods.alt;
+            try self.sync_mod_state(0, mouse_mods);
 
             const cell = self.cell_size() orelse Layer.CellSize{ .w = 1, .h = 1 };
             const coord = MouseEvent.Cell.from_vaxis(mouse).to_coord(.{ .cell_width = cell.w, .cell_height = cell.h });
