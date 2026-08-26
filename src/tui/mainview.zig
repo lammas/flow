@@ -1098,7 +1098,11 @@ const cmds = struct {
     pub const close_buffer_meta: Meta = .{ .arguments = &.{.string} };
 
     pub fn restore_session(self: *Self, _: Ctx) Result {
-        try self.read_restore_info(root.get_io(), root.get_now());
+        const logger = log.logger("session");
+        defer logger.deinit();
+        self.read_restore_info(root.get_io(), root.get_now()) catch |e|
+            return discard_restore_info(logger, e);
+        logger.print("session restored", .{});
         tui.need_render(@src());
     }
     pub const restore_session_meta: Meta = .{};
@@ -2495,6 +2499,19 @@ fn read_restore_info(self: *Self, io: std.Io, now: std.Io.Timestamp) !void {
     var iter: []const u8 = buf;
 
     try self.extract_state(&iter, .with_project, now);
+}
+
+fn discard_restore_info(logger: log.Logger, err: anyerror) void {
+    if (err == error.FileNotFound) return; // no session has been saved yet
+    const file_name = root.get_restore_file_name() catch |e|
+        return logger.print_err("session", "failed to restore session: {s} ({s})", .{ @errorName(err), @errorName(e) });
+    logger.print_err(
+        "session",
+        "failed to restore session: {s}",
+        .{@errorName(err)},
+    );
+    std.Io.Dir.deleteFileAbsolute(root.get_io(), file_name) catch |e|
+        logger.print_err("session", "failed to delete old session state {s}: {s}", .{ file_name, @errorName(e) });
 }
 
 fn restore_state(self: *Self, state: []const u8, now: std.Io.Timestamp) !void {

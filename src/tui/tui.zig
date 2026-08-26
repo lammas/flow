@@ -267,7 +267,6 @@ fn init(allocator: Allocator) InitError!*Self {
     try self.init_input_namespace();
     if (tp.env.get().is("restore-session")) {
         command.executeName("restore_session", .empty()) catch |e| self.logger.err("restore_session", e);
-        self.logger.print("session restored", .{});
     }
     self.start_config_watcher();
     return self;
