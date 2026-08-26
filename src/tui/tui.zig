@@ -234,6 +234,9 @@ fn init(allocator: Allocator) InitError!*Self {
     if (@hasDecl(renderer, "spawn"))
         self.render_pid = try renderer.spawn(root.get_io(), root.get_init().gpa);
 
+    if (tp.env.get().is("log-input"))
+        self.input_listeners_.add(EventHandler.bind(self, listen_input_log)) catch {};
+
     self.rdr_.set_sgr_pixel_mode_support(self.config_.enable_sgr_pixel_mode_support);
     self.rdr_.handler_ctx = self;
     self.rdr_.dispatch_input = dispatch_input;
@@ -397,6 +400,12 @@ fn deinit(self: *Self) void {
     self.query_cache_.deinit();
     root.free_config(self.allocator, self.config_bufs);
     self.clipboard_deinit();
+}
+
+fn listen_input_log(_: *Self, _: tp.pid_ref, m: tp.message) tp.result {
+    var buf: [512]u8 = undefined;
+    const json = m.to_json(&buf) catch |e| return tp.exit_error(e, @errorReturnTrace());
+    std.log.info("input: {s}", .{json});
 }
 
 fn listen_sigwinch(self: *Self) error{ThespianSignalInitFailed}!void {

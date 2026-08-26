@@ -78,6 +78,7 @@ pub fn main(init: std.process.Init) anyerror!void {
             .show_input = "Open the input view on start",
             .show_log = "Open the log view on start",
             .log_stdout = "Log to stdout",
+            .log_input = "Log input events",
             .language = "Force the language of the file to be opened",
             .list_languages = "Show available languages",
             .gui = "Open a GUI window",
@@ -121,6 +122,7 @@ pub fn main(init: std.process.Init) anyerror!void {
         show_input: bool,
         show_log: bool,
         log_stdout: bool,
+        log_input: bool,
         language: ?[]const u8,
         list_languages: bool,
         gui: bool,
@@ -249,6 +251,7 @@ pub fn main(init: std.process.Init) anyerror!void {
     env.set("show-input", args.show_input);
     env.set("show-log", args.show_log);
     env.set("log-stdout", args.log_stdout);
+    env.set("log-input", args.log_input);
     env.set("no-sleep", args.no_sleep);
     env.set("no-syntax", args.no_syntax);
     env.set("syntax-report-timing", args.syntax_report_timing);
