@@ -1757,6 +1757,12 @@ const cmds = struct {
     }
     pub const system_paste_meta: Meta = .{ .description = "Paste from system clipboard" };
 
+    pub fn system_paste_primary(_: *Self, _: Ctx) Result {
+        if (builtin.os.tag == .windows) return;
+        tui.rdr().request_primary_selection();
+    }
+    pub const system_paste_primary_meta: Meta = .{ .description = "Paste from primary selection" };
+
     pub fn find_in_files_query(self: *Self, ctx: Ctx) Result {
         var query: []const u8 = undefined;
         if (!try ctx.args.match(.{tp.extract(&query)})) return error.InvalidFindInFilesQueryArgument;

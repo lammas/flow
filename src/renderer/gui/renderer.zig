@@ -795,3 +795,12 @@ pub fn request_system_clipboard(self: *Self) void {
     _ = self;
     app.requestClipboard();
 }
+
+pub fn copy_to_primary_selection(self: *Self, text: []const u8) void {
+    _ = self;
+    _ = text;
+}
+
+pub fn request_primary_selection(self: *Self) void {
+    _ = self;
+}

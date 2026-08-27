@@ -814,6 +814,16 @@ pub fn request_system_clipboard(self: *Self) void {
     self.vx.requestSystemClipboard(self.tty.writer()) catch |e| log.logger(log_name).err("request_system_clipboard", e);
 }
 
+pub fn copy_to_primary_selection(self: *Self, text: []const u8) void {
+    var writer = self.tty.writer();
+    self.vx.copyToPrimarySelection(writer, text, self.allocator) catch |e| log.logger(log_name).err("copy_to_primary_selection", e);
+    writer.flush() catch @panic("flush failed");
+}
+
+pub fn request_primary_selection(self: *Self) void {
+    self.vx.requestPrimarySelection(self.tty.writer()) catch |e| log.logger(log_name).err("request_primary_selection", e);
+}
+
 const win32 = struct {
     const windows = std.os.windows;
     pub extern "user32" fn OpenClipboard(hWndNewOwner: ?windows.HWND) callconv(.winapi) windows.BOOL;

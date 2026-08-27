@@ -3093,6 +3093,10 @@ fn clipboard_send_to_system_internal(self: *Self, text: []const u8) void {
     }
 }
 
+pub fn primary_send_to_system(text: []const u8) void {
+    current().rdr_.copy_to_primary_selection(text);
+}
+
 pub fn set_last_palette(type_: PaletteType, ctx: command.Context) void {
     const self = current();
     if (self.last_palette) |old| {
