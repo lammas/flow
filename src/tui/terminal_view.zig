@@ -43,6 +43,15 @@ selection: ?Selection = null,
 selecting: bool = false,
 selection_screen: ?*Vt.Screen = null,
 selection_dropped: u64 = 0,
+last_click_ms: i64 = 0,
+last_click_pos: Position = .{ .row = 0, .col = 0 },
+click_count: u8 = 0,
+selection_mode: SelectionMode = .char,
+selection_anchor: Position = .{ .row = 0, .col = 0 },
+
+const double_click_time_ms = 350;
+const CharClass = enum { space, word, other };
+const SelectionMode = enum { char, word, line };
 
 const Position = struct { row: usize, col: u16 };
 const FileLinkHighlight = struct { row: usize, start_col: u16, end_col: u16 };
@@ -127,7 +136,11 @@ pub fn receive(self: *Self, from: tp.pid_ref, m: tp.message) error{Exit}!bool {
                 if (is_press) {
                     if (self.want_selection(mods)) {
                         _ = tui.set_focus_by_mouse_event();
-                        self.selection_start(coord);
+                        switch (self.next_click(coord)) {
+                            1 => self.selection_start(coord),
+                            2 => self.select_word(coord),
+                            else => self.select_line(coord),
+                        }
                         return true;
                     }
                     self.clear_selection();
@@ -591,11 +604,82 @@ fn coord_to_position(self: *Self, coord: MouseEvent.Coord) Position {
 
 fn selection_start(self: *Self, coord: MouseEvent.Coord) void {
     const pos = self.coord_to_position(coord);
-    self.selection = .{ .begin = pos, .end = pos };
+    self.begin_selection(.char, pos, .{ .begin = pos, .end = pos });
+}
+
+fn begin_selection(self: *Self, mode: SelectionMode, anchor: Position, span: Selection) void {
+    self.selection_mode = mode;
+    self.selection_anchor = anchor;
+    self.selection = span;
     self.selecting = true;
     self.selection_screen = self.vt.vt.back_screen;
     self.selection_dropped = self.vt.vt.back_screen.dropped;
     tui.need_render(@src());
+}
+
+fn next_click(self: *Self, coord: MouseEvent.Coord) u8 {
+    const now = root.get_now().toMilliseconds();
+    const pos = self.coord_to_position(coord);
+    const same = self.last_click_pos.row == pos.row and self.last_click_pos.col == pos.col;
+    if (same and self.click_count > 0 and self.click_count < 3 and now - self.last_click_ms <= double_click_time_ms)
+        self.click_count += 1
+    else
+        self.click_count = 1;
+    self.last_click_ms = now;
+    self.last_click_pos = pos;
+    return self.click_count;
+}
+
+fn col_class(screen: *const Vt.Screen, row: usize, col: u16) CharClass {
+    const bytes = screen.buf[row * screen.width + col].char.bytes();
+    if (bytes.len == 0) return .space;
+    const c = bytes[0];
+    if (c == ' ' or c == '\t') return .space;
+    if (c >= 0x80 or std.ascii.isAlphanumeric(c) or c == '_') return .word;
+    return .other;
+}
+
+fn word_range(self: *Self, pos: Position) Selection {
+    const screen = self.vt.vt.back_screen;
+    var c0 = pos.col;
+    var c1 = pos.col;
+    const cls = col_class(screen, pos.row, pos.col);
+    if (cls != .space) {
+        while (c0 > 0 and col_class(screen, pos.row, c0 - 1) == cls) c0 -= 1;
+        while (c1 + 1 < screen.width and col_class(screen, pos.row, c1 + 1) == cls) c1 += 1;
+    }
+    return .{ .begin = .{ .row = pos.row, .col = c0 }, .end = .{ .row = pos.row, .col = c1 } };
+}
+
+fn line_range(self: *Self, pos: Position) Selection {
+    const screen = self.vt.vt.back_screen;
+    return .{ .begin = .{ .row = pos.row, .col = 0 }, .end = .{ .row = pos.row, .col = screen.width -| 1 } };
+}
+
+fn select_word(self: *Self, coord: MouseEvent.Coord) void {
+    const screen = self.vt.vt.back_screen;
+    if (screen.width == 0) return;
+    const pos = self.coord_to_position(coord);
+    if (pos.row >= screen.buf.len / screen.width) return;
+    self.begin_selection(.word, pos, self.word_range(pos));
+}
+
+fn select_line(self: *Self, coord: MouseEvent.Coord) void {
+    const screen = self.vt.vt.back_screen;
+    if (screen.width == 0) return;
+    const pos = self.coord_to_position(coord);
+    self.begin_selection(.line, pos, self.line_range(pos));
+}
+
+fn pos_le(a: Position, b: Position) bool {
+    return a.row < b.row or (a.row == b.row and a.col <= b.col);
+}
+
+fn union_range(a: Selection, b: Selection) Selection {
+    return .{
+        .begin = if (pos_le(a.begin, b.begin)) a.begin else b.begin,
+        .end = if (pos_le(a.end, b.end)) b.end else a.end,
+    };
 }
 
 fn reconcile_selection(self: *Self) void {
@@ -609,21 +693,28 @@ fn reconcile_selection(self: *Self) void {
     if (sel.begin.row < delta or sel.end.row < delta) return self.clear_selection();
     sel.begin.row -= delta;
     sel.end.row -= delta;
+    self.selection_anchor.row -|= delta;
     self.selection = sel;
 }
 
 fn selection_extend(self: *Self, coord: MouseEvent.Coord) void {
-    if (self.selection) |*sel| {
-        sel.end = self.coord_to_position(coord);
-        tui.need_render(@src());
-    }
+    if (self.selection == null) return;
+    const cur = self.coord_to_position(coord);
+    self.selection = switch (self.selection_mode) {
+        .char => .{ .begin = self.selection.?.begin, .end = cur },
+        .word => union_range(self.word_range(self.selection_anchor), self.word_range(cur)),
+        .line => union_range(self.line_range(self.selection_anchor), self.line_range(cur)),
+    };
+    tui.need_render(@src());
 }
 
 fn selection_finish(self: *Self) void {
     self.selecting = false;
-    if (self.selection) |sel| if (sel.begin.row == sel.end.row and sel.begin.col == sel.end.col) {
-        self.selection = null;
-        tui.need_render(@src());
+    if (self.selection_mode == .char) if (self.selection) |sel| {
+        if (sel.begin.row == sel.end.row and sel.begin.col == sel.end.col) {
+            self.selection = null;
+            tui.need_render(@src());
+        }
     };
 }
 
@@ -667,6 +758,7 @@ fn selection_text(self: *Self, out_allocator: Allocator) !?[]u8 {
         if (row != s.start.row) try out.writer.writeByte('\n');
         try out.writer.writeAll(std.mem.trimEnd(u8, seg, " \t"));
     }
+    if (self.selection_mode == .line) try out.writer.writeByte('\n');
     return try out.toOwnedSlice();
 }
 
