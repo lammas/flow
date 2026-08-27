@@ -204,6 +204,7 @@ allocator: std.mem.Allocator,
 width: u16 = 0,
 height: u16 = 0,
 visible_top: usize = 0,
+dropped: u64 = 0,
 
 scrolling_region: ScrollingRegion,
 
@@ -770,6 +771,7 @@ pub fn index(self: *Screen) !void {
                 self.ring.advance();
                 self.buf = self.ring.window();
                 self.shiftMarksUp(0, @intCast(total_rows - 1), 1);
+                self.dropped += 1;
             }
             // recycled bottom row is stale
             const new_bottom = self.rowIndex(self.height - 1, 0);

@@ -41,6 +41,8 @@ file_link_: ?file_link.Dest = null,
 
 selection: ?Selection = null,
 selecting: bool = false,
+selection_screen: ?*Vt.Screen = null,
+selection_dropped: u64 = 0,
 
 const Position = struct { row: usize, col: u16 };
 const FileLinkHighlight = struct { row: usize, start_col: u16, end_col: u16 };
@@ -540,6 +542,7 @@ inline fn render_file_link_highlight_cell(self: *Self, style: Widget.Theme.Style
 }
 
 fn render_selection(self: *Self, theme: *const Widget.Theme) void {
+    self.reconcile_selection();
     const sel = self.selection orelse return;
     const s = sel.ordered();
     const screen = self.vt.vt.back_screen;
@@ -587,7 +590,23 @@ fn selection_start(self: *Self, coord: MouseEvent.Coord) void {
     const pos = self.coord_to_position(coord);
     self.selection = .{ .begin = pos, .end = pos };
     self.selecting = true;
+    self.selection_screen = self.vt.vt.back_screen;
+    self.selection_dropped = self.vt.vt.back_screen.dropped;
     tui.need_render(@src());
+}
+
+fn reconcile_selection(self: *Self) void {
+    var sel = self.selection orelse return;
+    const screen = self.vt.vt.back_screen;
+    if (self.selection_screen != screen) return self.clear_selection();
+
+    const delta = screen.dropped -| self.selection_dropped;
+    if (delta == 0) return;
+    self.selection_dropped = screen.dropped;
+    if (sel.begin.row < delta or sel.end.row < delta) return self.clear_selection();
+    sel.begin.row -= delta;
+    sel.end.row -= delta;
+    self.selection = sel;
 }
 
 fn selection_extend(self: *Self, coord: MouseEvent.Coord) void {
@@ -626,6 +645,7 @@ fn byte_offset_for_col(col_at_byte: []const u16, col: u16) ?usize {
 }
 
 pub fn handle_resize(self: *Self, pos: Widget.Box) void {
+    self.clear_selection();
     self.plane.move_yx(@intCast(pos.y), @intCast(pos.x)) catch return;
     self.plane.resize_simple(@intCast(pos.h), @intCast(pos.w)) catch return;
     self.vt.resize(pos);
