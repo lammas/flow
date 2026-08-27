@@ -418,7 +418,10 @@ pub fn render(self: *Self, theme: *const Widget.Theme) bool {
 }
 
 fn apply_mouse_cursor(self: *Self) void {
-    tui.rdr().request_mouse_cursor(self.vt.pointer_shape, self.hover);
+    if (self.selection != null)
+        tui.rdr().request_mouse_cursor(.text, self.hover)
+    else
+        tui.rdr().request_mouse_cursor(self.vt.pointer_shape, self.hover);
 }
 
 fn resolve_color(c: *vaxis.Cell.Color, palette: *const [256][3]u8) void {
