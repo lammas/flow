@@ -34,13 +34,28 @@ hover: bool = false,
 vt: *Vt,
 commands: Commands = undefined,
 
-hover_pos: ?HoverPos = null,
-last_hover_pos: ?HoverPos = null,
+hover_pos: ?Position = null,
+last_hover_pos: ?Position = null,
 file_link_highlight: ?FileLinkHighlight = null,
 file_link_: ?file_link.Dest = null,
 
-const HoverPos = struct { row: u16, col: u16 };
-const FileLinkHighlight = struct { row: u16, start_col: u16, end_col: u16 };
+selection: ?Selection = null,
+selecting: bool = false,
+
+const Position = struct { row: usize, col: u16 };
+const FileLinkHighlight = struct { row: usize, start_col: u16, end_col: u16 };
+
+const Selection = struct {
+    begin: Position,
+    end: Position,
+
+    fn ordered(self: @This()) struct { start: Position, end: Position } {
+        const a = self.begin;
+        const b = self.end;
+        const a_first = a.row < b.row or (a.row == b.row and a.col <= b.col);
+        return if (a_first) .{ .start = a, .end = b } else .{ .start = b, .end = a };
+    }
+};
 
 pub fn create(allocator: Allocator, parent: Plane, ctx: command.Context) !Widget {
     const container = try WidgetList.createHStyled(
@@ -106,6 +121,24 @@ pub fn receive(self: *Self, from: tp.pid_ref, m: tp.message) error{Exit}!bool {
                 else => {},
             };
 
+            if (button == .left) {
+                if (is_press) {
+                    if (self.want_selection(mods)) {
+                        _ = tui.set_focus_by_mouse_event();
+                        self.selection_start(coord);
+                        return true;
+                    }
+                    self.clear_selection();
+                } else if (self.selecting) {
+                    self.selection_finish();
+                    return true;
+                }
+            }
+            if (self.selection != null and button == .right) {
+                self.selection_extend(coord);
+                return true;
+            }
+
             // Set focus on left/middle/right button press
             if (is_press) switch (button) {
                 .left, .middle, .right => switch (tui.set_focus_by_mouse_event()) {
@@ -147,6 +180,14 @@ pub fn receive(self: *Self, from: tp.pid_ref, m: tp.message) error{Exit}!bool {
         }
         // Mouse drag
         if (try m.match(.{ MouseEvent.Type.drag, tp.extract(&btn), tp.extract(&coord), tp.extract(&mods) })) {
+            if (self.selecting and btn.to_vaxis() == .left) {
+                self.selection_extend(coord);
+                return true;
+            }
+            if (self.selection != null and btn.to_vaxis() == .right) {
+                self.selection_extend(coord);
+                return true;
+            }
             if (self.focused and self.vt.vt.mode.mouse != .none) {
                 const cell = coord.to_cell(self.plane.mouse_geometry());
                 const mouse_event: vaxis.Mouse = .{
@@ -367,6 +408,7 @@ pub fn render(self: *Self, theme: *const Widget.Theme) bool {
 
     self.update_file_link_highlight();
     self.render_file_link_highlight(theme);
+    self.render_selection(theme);
 
     if (self.hover) self.apply_mouse_cursor();
 
@@ -385,7 +427,7 @@ fn resolve_color(c: *vaxis.Cell.Color, palette: *const [256][3]u8) void {
 }
 
 fn update_hover_pos(self: *Self, row: u16, col: u16) void {
-    const pos: HoverPos = .{ .row = row, .col = col };
+    const pos: Position = .{ .row = row, .col = col };
     self.hover_pos = pos;
     if (self.last_hover_pos) |last| if (last.row == pos.row and last.col == pos.col)
         return;
@@ -444,7 +486,7 @@ fn update_file_link_highlight(self: *Self) void {
     self.set_file_link(link, .{ .row = pos.row, .start_col = start_col, .end_col = end_col }) catch @panic("OOM terminal_view.set_file_link");
 }
 
-fn try_set_osc8_highlight(self: *Self, screen: *const Vt.Screen, screen_row: usize, pos: HoverPos) bool {
+fn try_set_osc8_highlight(self: *Self, screen: *const Vt.Screen, screen_row: usize, pos: Position) bool {
     if (screen.width == 0) return false;
     const total_rows = screen.buf.len / screen.width;
     if (screen_row >= total_rows) return false;
@@ -495,6 +537,80 @@ inline fn render_file_link_highlight_cell(self: *Self, style: Widget.Theme.Style
     cell.cell.style.ul_style = .curly;
     if (style.bg) |ul_col| cell.set_under_color(ul_col.color);
     _ = self.plane.putc(&cell) catch {};
+}
+
+fn render_selection(self: *Self, theme: *const Widget.Theme) void {
+    const sel = self.selection orelse return;
+    const s = sel.ordered();
+    const screen = self.vt.vt.back_screen;
+    if (screen.height == 0 or screen.width == 0) return;
+    const top = screen.visible_top -| self.vt.vt.scroll_offset;
+    var abs = s.start.row;
+    while (abs <= s.end.row) : (abs += 1) {
+        if (abs < top) continue;
+        const vrow = abs - top;
+        if (vrow >= screen.height) break;
+        const col_start: u16 = if (abs == s.start.row) s.start.col else 0;
+        const col_end: u16 = if (abs == s.end.row) s.end.col else screen.width - 1;
+        var col: u16 = col_start;
+        while (col <= col_end and col < screen.width) : (col += 1) {
+            self.plane.cursor_move_yx(@intCast(vrow), @intCast(col));
+            self.render_selection_cell(theme);
+        }
+    }
+}
+
+inline fn render_selection_cell(self: *Self, theme: *const Widget.Theme) void {
+    var cell = self.plane.cell_init();
+    _ = self.plane.at_cursor_cell(&cell) catch return;
+    cell.set_style_bg(theme.terminal_selection);
+    cell.set_style_fg(theme.terminal_selection);
+    _ = self.plane.putc(&cell) catch {};
+}
+
+fn want_selection(self: *Self, mods: MouseEvent.Modifiers) bool {
+    return mods.shift or
+        (self.vt.vt.back_screen == &self.vt.vt.back_screen_pri and
+            self.vt.vt.mode.mouse == .none);
+}
+
+fn coord_to_position(self: *Self, coord: MouseEvent.Coord) Position {
+    const screen = self.vt.vt.back_screen;
+    const cell = coord.to_cell(self.plane.mouse_geometry());
+    const vrow: usize = if (cell.row < 0) 0 else @min(@as(usize, @intCast(cell.row)), screen.height -| 1);
+    const vcol: usize = if (cell.col < 0) 0 else @min(@as(usize, @intCast(cell.col)), @as(usize, screen.width) -| 1);
+    const top = screen.visible_top -| self.vt.vt.scroll_offset;
+    return .{ .row = top + vrow, .col = @intCast(vcol) };
+}
+
+fn selection_start(self: *Self, coord: MouseEvent.Coord) void {
+    const pos = self.coord_to_position(coord);
+    self.selection = .{ .begin = pos, .end = pos };
+    self.selecting = true;
+    tui.need_render(@src());
+}
+
+fn selection_extend(self: *Self, coord: MouseEvent.Coord) void {
+    if (self.selection) |*sel| {
+        sel.end = self.coord_to_position(coord);
+        tui.need_render(@src());
+    }
+}
+
+fn selection_finish(self: *Self) void {
+    self.selecting = false;
+    if (self.selection) |sel| if (sel.begin.row == sel.end.row and sel.begin.col == sel.end.col) {
+        self.selection = null;
+        tui.need_render(@src());
+    };
+}
+
+fn clear_selection(self: *Self) void {
+    if (self.selection != null or self.selecting) {
+        self.selection = null;
+        self.selecting = false;
+        tui.need_render(@src());
+    }
 }
 
 fn byte_offset_for_col(col_at_byte: []const u16, col: u16) ?usize {
