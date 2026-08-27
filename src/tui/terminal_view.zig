@@ -632,6 +632,41 @@ fn clear_selection(self: *Self) void {
     }
 }
 
+fn selection_text(self: *Self, out_allocator: Allocator) !?[]u8 {
+    self.reconcile_selection();
+    const sel = self.selection orelse return null;
+    const s = sel.ordered();
+    const screen = self.vt.vt.back_screen;
+    if (screen.width == 0) return null;
+    const total_rows = screen.buf.len / screen.width;
+
+    var out: std.Io.Writer.Allocating = .init(out_allocator);
+    errdefer out.deinit();
+
+    var line: std.ArrayList(u8) = .empty;
+    defer line.deinit(self.allocator);
+    var col_at_byte: std.ArrayList(u16) = .empty;
+    defer col_at_byte.deinit(self.allocator);
+
+    var row = s.start.row;
+    while (row <= s.end.row) : (row += 1) {
+        if (row >= total_rows) break;
+        line.clearRetainingCapacity();
+        col_at_byte.clearRetainingCapacity();
+        try screen.extractRowText(self.allocator, row, &line, &col_at_byte);
+
+        const c0: u16 = if (row == s.start.row) s.start.col else 0;
+        const c1: u16 = if (row == s.end.row) s.end.col else screen.width - 1;
+        const start_byte = byte_offset_for_col(col_at_byte.items, c0) orelse line.items.len;
+        const end_byte = byte_offset_for_col(col_at_byte.items, c1 +| 1) orelse line.items.len;
+        const seg = if (start_byte < end_byte) line.items[start_byte..end_byte] else line.items[0..0];
+
+        if (row != s.start.row) try out.writer.writeByte('\n');
+        try out.writer.writeAll(std.mem.trimEnd(u8, seg, " \t"));
+    }
+    return try out.toOwnedSlice();
+}
+
 fn byte_offset_for_col(col_at_byte: []const u16, col: u16) ?usize {
     if (col_at_byte.len == 0) return null;
     // The final entry maps "one past the last byte" to its column. If the
@@ -708,6 +743,19 @@ const cmds = struct {
         self.vt.kill();
     }
     pub const terminal_kill_meta: Meta = .{ .description = "Terminal: Kill running application (SIGTERM)" };
+
+    pub fn terminal_copy_selection(self: *Self, _: Ctx) Result {
+        const text = (try self.selection_text(tui.clipboard_allocator())) orelse return;
+        if (text.len == 0) {
+            self.allocator.free(text);
+            return;
+        }
+        tui.clipboard_clear_all();
+        tui.clipboard_start_group();
+        tui.clipboard_add_chunk(text);
+        tui.clipboard_send_to_system() catch {};
+    }
+    pub const terminal_copy_selection_meta: Meta = .{ .description = "Terminal: Copy selection" };
 
     pub fn terminal_scroll_up(self: *Self, _: Ctx) Result {
         const half_page = @max(1, self.vt.vt.front_screen.height / 2);
