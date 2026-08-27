@@ -204,7 +204,7 @@ allocator: std.mem.Allocator,
 width: u16 = 0,
 height: u16 = 0,
 visible_top: usize = 0,
-dropped: u64 = 0,
+dropped: usize = 0,
 
 scrolling_region: ScrollingRegion,
 
