@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 
 const tp = @import("thespian");
@@ -151,6 +152,12 @@ pub fn receive(self: *Self, from: tp.pid_ref, m: tp.message) error{Exit}!bool {
             }
             if (self.selection != null and button == .right) {
                 self.selection_extend(coord);
+                if (!is_press) self.copy_selection_to_primary();
+                return true;
+            }
+            if (button == .middle and is_press and self.want_selection(mods)) {
+                _ = tui.set_focus_by_mouse_event();
+                self.paste_from_primary();
                 return true;
             }
 
@@ -716,6 +723,21 @@ fn selection_finish(self: *Self) void {
             tui.need_render(@src());
         }
     };
+    if (self.selection != null) self.copy_selection_to_primary();
+}
+
+fn copy_selection_to_primary(self: *Self) void {
+    const text = (self.selection_text(self.allocator) catch return) orelse return;
+    defer self.allocator.free(text);
+    if (text.len == 0) return;
+    tui.rdr().copy_to_primary_selection(text);
+}
+
+fn paste_from_primary(_: *Self) void {
+    switch (builtin.os.tag) {
+        .windows, .macos => tui.rdr().request_system_clipboard(),
+        else => tui.rdr().request_primary_selection(),
+    }
 }
 
 fn clear_selection(self: *Self) void {
