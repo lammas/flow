@@ -159,6 +159,7 @@ pub fn deinit(self: *Self, allocator: std.mem.Allocator) void {
     self.floating_views.deinit();
     self.buffer_manager.deinit();
     self.lsp_info.deinit();
+    self.store_last_match_text(null);
     allocator.destroy(self);
 }
 
@@ -2118,10 +2119,10 @@ pub fn handle_editor_event(self: *Self, editor: *ed.Editor, m: tp.message) tp.re
             if (sel.end.row - sel.begin.row > ed.max_match_lines)
                 return self.clear_auto_find(editor);
             const text = editor.get_selection(sel, self.allocator) catch return self.clear_auto_find(editor);
-            if (text.len == 0)
+            if (text.len == 0 or (text.len == 1 and text[0] == ' ')) {
+                self.allocator.free(text);
                 return self.clear_auto_find(editor);
-            if (text.len == 1 and (text[0] == ' '))
-                return self.clear_auto_find(editor);
+            }
             if (!self.is_last_match_text(text))
                 tp.self_pid().send(.{ "cmd", "find_query", .{ text, "auto_find" } }) catch return;
         }
