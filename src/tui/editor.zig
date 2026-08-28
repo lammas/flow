@@ -3069,6 +3069,25 @@ pub const Editor = struct {
         return self.primary_drag(y, x, root_mod.get_now());
     }
 
+    pub fn tertiary_click(self: *Self, y: c_int, x: c_int) !void {
+        if (y < 0 or x < 0) return;
+        const root = self.buf_root() catch return;
+        self.cancel_all_selections();
+        const primary = self.get_primary();
+        self.selection_mode = .char;
+        try self.send_editor_jump_source();
+        primary.cursor.move_abs(root, &self.view, @intCast(y), @intCast(x), self.metrics) catch return;
+        self.collapse_cursors();
+        self.clamp_mouse(root_mod.get_now());
+        try self.send_editor_jump_destination();
+        if (tui.jump_mode()) try self.goto_definition(.empty());
+        tui.reset_input_idle_timer();
+        switch (builtin.os.tag) {
+            .windows, .macos => tui.rdr().request_system_clipboard(),
+            else => tui.rdr().request_primary_selection(),
+        }
+    }
+
     pub fn update_hover_pos(self: *Self, y: usize, x: usize) void {
         const pos: HoverPos = .{
             .row = self.view.row + y,
@@ -8148,7 +8167,10 @@ pub const EditorWidget = struct {
         self.editor.primary_drag(y_, x_, root_mod.get_now());
     }
 
-    fn mouse_click_button2(_: *Self, _: MouseEvent.Coord) Result {}
+    fn mouse_click_button2(self: *Self, coord: MouseEvent.Coord) Result {
+        const y_, const x_ = self.mouse_pos_abs(coord);
+        try self.editor.tertiary_click(y_, x_);
+    }
 
     fn mouse_drag_button2(_: *Self, _: MouseEvent.Coord) Result {}
 
