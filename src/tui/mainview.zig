@@ -2113,18 +2113,26 @@ pub fn handle_editor_event(self: *Self, editor: *ed.Editor, m: tp.message) tp.re
         if (try m.match(.{ tp.any, tp.any, "none" }))
             return self.clear_auto_find(editor);
         if (try m.match(.{ tp.any, tp.any, tp.extract(&sel.begin.row), tp.extract(&sel.begin.col), tp.extract(&sel.end.row), tp.extract(&sel.end.col) })) {
-            if (!tui.config().enable_auto_find) return;
-            if (editor.find_selection_match(sel)) |_| return;
-            sel.normalize();
-            if (sel.end.row - sel.begin.row > ed.max_match_lines)
-                return self.clear_auto_find(editor);
-            const text = editor.get_selection(sel, self.allocator) catch return self.clear_auto_find(editor);
-            if (text.len == 0 or (text.len == 1 and text[0] == ' ')) {
-                self.allocator.free(text);
-                return self.clear_auto_find(editor);
+            if (tui.config().enable_auto_find) {
+                if (editor.find_selection_match(sel)) |_| return;
+                sel.normalize();
             }
-            if (!self.is_last_match_text(text))
-                tp.self_pid().send(.{ "cmd", "find_query", .{ text, "auto_find" } }) catch return;
+            if (sel.end.row - sel.begin.row > ed.max_match_lines) {
+                if (tui.config().enable_auto_find) self.clear_auto_find(editor);
+                return;
+            }
+            const text = editor.get_selection(sel, self.allocator) catch return self.clear_auto_find(editor);
+            tui.primary_send_to_system(text);
+            if (tui.config().enable_auto_find) {
+                if (text.len == 0 or (text.len == 1 and text[0] == ' ')) {
+                    self.allocator.free(text);
+                    return self.clear_auto_find(editor);
+                }
+                if (!self.is_last_match_text(text))
+                    tp.self_pid().send(.{ "cmd", "find_query", .{ text, "auto_find" } }) catch return;
+            } else {
+                self.allocator.free(text);
+            }
         }
         return;
     }
