@@ -798,9 +798,10 @@ pub fn request_system_clipboard(self: *Self) void {
 
 pub fn copy_to_primary_selection(self: *Self, text: []const u8) void {
     _ = self;
-    _ = text;
+    app.setPrimary(text);
 }
 
 pub fn request_primary_selection(self: *Self) void {
     _ = self;
+    app.requestPrimary();
 }

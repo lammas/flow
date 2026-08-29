@@ -189,9 +189,13 @@ var window_class_len: usize = 0;
 // Clipboard write (heap-allocated, transferred to wio thread)
 var clipboard_mutex: std.Io.Mutex = .init;
 var clipboard_write: ?[]u8 = null;
+// Primary selection write, guarded by clipboard_mutex.
+var primary_write: ?[]u8 = null;
 
 // Clipboard read request
 var clipboard_read_pending: std.atomic.Value(bool) = .init(false);
+// Primary selection read request
+var primary_read_pending: std.atomic.Value(bool) = .init(false);
 
 fn clipboardText(_: ?*anyopaque, text: []const u8) void {
     tui_pid.send(.{ "RDR", "system_clipboard", text }) catch {};
@@ -696,6 +700,22 @@ pub fn requestClipboard() void {
     wio.cancelWait();
 }
 
+pub fn setPrimary(text: []const u8) void {
+    const io = root.get_io();
+    const allocator = root.get_init().gpa;
+    const copy = allocator.dupe(u8, text) catch return;
+    clipboard_mutex.lockUncancelable(io);
+    defer clipboard_mutex.unlock(io);
+    if (primary_write) |old| allocator.free(old);
+    primary_write = copy;
+    wio.cancelWait();
+}
+
+pub fn requestPrimary() void {
+    primary_read_pending.store(true, .release);
+    wio.cancelWait();
+}
+
 pub fn setMouseCursor(shape: vaxis.Mouse.Shape) void {
     const cursor: wio.Cursor = switch (shape) {
         .default => .default,
@@ -1182,6 +1202,19 @@ fn wioLoop() void {
         }
         if (clipboard_read_pending.swap(false, .acq_rel)) {
             window.getClipboardText(clipboardText, null);
+        }
+        {
+            clipboard_mutex.lockUncancelable(io);
+            const pending = primary_write;
+            primary_write = null;
+            clipboard_mutex.unlock(io);
+            if (pending) |text| {
+                defer allocator.free(text);
+                window.setPrimaryText(text);
+            }
+        }
+        if (primary_read_pending.swap(false, .acq_rel)) {
+            window.getPrimaryText(clipboardText, null);
         }
         if (cursor_dirty.swap(false, .acq_rel)) {
             window.setCursor(@enumFromInt(pending_cursor.load(.acquire)));
