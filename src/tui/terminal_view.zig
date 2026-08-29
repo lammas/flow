@@ -773,15 +773,20 @@ fn selection_text(self: *Self, out_allocator: Allocator) !?[]u8 {
 
         const c0: u16 = if (row == s.start.row) s.start.col else 0;
         const c1: u16 = if (row == s.end.row) s.end.col else screen.width - 1;
-        const start_byte = byte_offset_for_col(col_at_byte.items, c0) orelse line.items.len;
-        const end_byte = byte_offset_for_col(col_at_byte.items, c1 +| 1) orelse line.items.len;
-        const seg = if (start_byte < end_byte) line.items[start_byte..end_byte] else line.items[0..0];
+        const start_byte = col_start_byte(col_at_byte.items, c0);
+        const end_byte = col_start_byte(col_at_byte.items, c1 +| 1);
+        const seg = line.items[start_byte..end_byte];
 
         if (row != s.start.row) try out.writer.writeByte('\n');
         try out.writer.writeAll(std.mem.trimEnd(u8, seg, " \t"));
     }
     if (self.selection_mode == .line) try out.writer.writeByte('\n');
     return try out.toOwnedSlice();
+}
+
+fn col_start_byte(col_at_byte: []const u16, col: u16) usize {
+    for (col_at_byte, 0..) |c, i| if (c >= col) return i;
+    return col_at_byte.len -| 1;
 }
 
 fn byte_offset_for_col(col_at_byte: []const u16, col: u16) ?usize {

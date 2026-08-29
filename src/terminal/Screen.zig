@@ -686,17 +686,19 @@ pub fn extractRowText(
     const row_base = row * self.width;
     const start_len = out.items.len;
     var col: u16 = 0;
-    while (col < self.width) : (col += 1) {
+    while (col < self.width) {
         const cell = &self.buf[row_base + col];
         const cell_bytes = cell.char.bytes();
         if (cell_bytes.len == 0) {
             try out.append(allocator, ' ');
             if (col_at_byte) |m| try m.append(allocator, col);
+            col += 1;
         } else {
             for (cell_bytes) |b| {
                 try out.append(allocator, b);
                 if (col_at_byte) |m| try m.append(allocator, col);
             }
+            col += @max(1, cell.width);
         }
     }
     while (out.items.len > start_len and out.items[out.items.len - 1] == ' ') {
